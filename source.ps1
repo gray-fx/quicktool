@@ -1,7 +1,6 @@
 # ==========================================
 # CONFIG & SETTINGS
-
-# CHECK OCTOPUS
+# CHECK CODE: SQUID
 # ==========================================
 $port = 8282
 $url = "http://localhost:$port/"
@@ -46,15 +45,19 @@ $html = @"
     <script>
         async function run(cmd) {
             const statusDiv = document.getElementById('status');
-            statusDiv.innerText = "Processing: " + cmd + "...";
+            statusDiv.innerText = "Connecting...";
             try {
-                // Fetch to localhost. The slash is important!
-                const resp = await fetch('/' + cmd);
+                // We use the full URL to prevent 'relative path' confusion
+                const resp = await fetch('http://localhost:8282/' + cmd, { 
+                    method: 'GET',
+                    mode: 'cors',
+                    cache: 'no-cache'
+                });
                 const text = await resp.text();
-                statusDiv.innerText = "Success: " + text;
+                statusDiv.innerText = text;
             } catch (e) {
-                statusDiv.innerText = "Error: Could not connect to PowerShell.";
-                console.error(e);
+                statusDiv.innerText = "Error: PS Listener not responding.";
+                console.error("Fetch failed:", e);
             }
         }
     </script>
@@ -70,9 +73,9 @@ $listener.Prefixes.Add($url)
 try {
     $listener.Start()
     Write-Host "Server started at $url" -ForegroundColor Green
-    Start-Process $url # Opens the GUI
+    Start-Process $url 
 } catch {
-    Write-Host "Error: Could not start listener on port $port. Is another script running?" -ForegroundColor Red
+    Write-Host "Error: Port $port is blocked." -ForegroundColor Red
     pause; exit
 }
 
@@ -81,13 +84,21 @@ while ($listener.IsListening) {
     $request = $context.Request
     $response = $context.Response
     
-    # DEBUG: See what the browser is asking for
     $route = $request.Url.LocalPath.ToLower() 
-    Write-Host "Request Received: $route" -ForegroundColor Gray
+    Write-Host "Request: $route" -ForegroundColor Gray
 
-    $msg = "Unknown Command"
+    # 1. HANDLE BROWSER SECURITY (CORS)
+    $response.AddHeader("Access-Control-Allow-Origin", "*")
+    $response.AddHeader("Access-Control-Allow-Methods", "GET, OPTIONS")
+    
+    if ($request.HttpMethod -eq "OPTIONS") {
+        $response.Close()
+        continue
+    }
 
-    # ROUTING LOGIC (Fixed to match leading slash)
+    $msg = "Action Complete"
+
+    # 2. RUN COMMANDS
     switch ($route) {
         "/" { $msg = $html; $response.ContentType = "text/html" }
         "/enable" {
@@ -122,9 +133,6 @@ while ($listener.IsListening) {
         }
     }
 
-    # REQUIRED: Add CORS headers so the browser doesn't block the reply
-    $response.AddHeader("Access-Control-Allow-Origin", "*")
-    
     $buffer = [System.Text.Encoding]::UTF8.GetBytes($msg)
     $response.ContentLength64 = $buffer.Length
     $response.OutputStream.Write($buffer, 0, $buffer.Length)
