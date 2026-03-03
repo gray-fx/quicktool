@@ -1,3 +1,4 @@
+# check = octopus
 $signature = @"
 [DllImport("wininet.dll", SetLastError = true)]
 public static extern bool InternetSetOption(IntPtr hInternet, int dwOption, IntPtr lpBuffer, int dwBufferLength);
