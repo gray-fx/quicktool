@@ -1,5 +1,5 @@
 # ==========================================
-# REFRESH & HELPER FUNCTIONS NEW24156
+# REFRESH & HELPER FUNCTIONS
 # ==========================================
 $signature = @"
 [DllImport("wininet.dll", SetLastError = true)]
@@ -29,7 +29,7 @@ Add-Type -AssemblyName System.Drawing
 # CREATE FORM
 # ==========================================
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "Quicktool v1.2 (GitHub Live)"
+$form.Text = "Quicktool v1.3"
 $form.Size = New-Object System.Drawing.Size(420, 540)
 $form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
 $form.ForeColor = [System.Drawing.Color]::White
@@ -39,28 +39,59 @@ $form.FormBorderStyle = "FixedDialog"
 $form.MaximizeBox = $false
 $form.Topmost = $true
 
-# Status Panel
+# ==========================================
+# STATUS PANEL (RE-ADDED)
+# ==========================================
 $statusPanel = New-Object System.Windows.Forms.Panel
-$statusPanel.Size = New-Object System.Drawing.Size(340, 60); $statusPanel.Location = New-Object System.Drawing.Point(30, 40); $statusPanel.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 48); $form.Controls.Add($statusPanel)
+$statusPanel.Size = New-Object System.Drawing.Size(340, 60)
+$statusPanel.Location = New-Object System.Drawing.Point(30, 40)
+$statusPanel.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 48)
+$form.Controls.Add($statusPanel)
 
-$filterStatus = New-Object System.Windows.Forms.Label; $filterStatus.Text = "Filter: --"; $filterStatus.Location = New-Object System.Drawing.Point(10, 10); $filterStatus.Size = New-Object System.Drawing.Size(320, 20); $statusPanel.Controls.Add($filterStatus)
-$classroomStatus = New-Object System.Windows.Forms.Label; $classroomStatus.Text = "App: --"; $classroomStatus.Location = New-Object System.Drawing.Point(10, 32); $classroomStatus.Size = New-Object System.Drawing.Size(320, 20); $statusPanel.Controls.Add($classroomStatus)
+$filterStatus = New-Object System.Windows.Forms.Label
+$filterStatus.Text = "Filter: --"
+$filterStatus.Location = New-Object System.Drawing.Point(10, 10)
+$filterStatus.Size = New-Object System.Drawing.Size(320, 20)
+$statusPanel.Controls.Add($filterStatus)
+
+$classroomStatus = New-Object System.Windows.Forms.Label
+$classroomStatus.Text = "App: --"
+$classroomStatus.Location = New-Object System.Drawing.Point(10, 32)
+$classroomStatus.Size = New-Object System.Drawing.Size(320, 20)
+$statusPanel.Controls.Add($classroomStatus)
 
 function Update-Status {
-    $current = (Get-ItemProperty -Path $userSettingsPath -Name "AutoConfigURL" -ErrorAction SilentlyContinue).AutoConfigURL
-    $filterStatus.Text = if ($current) { "● Securly Filter: ACTIVE" } else { "○ Securly Filter: DISABLED" }
-    $filterStatus.ForeColor = if ($current) { [System.Drawing.Color]::LimeGreen } else { [System.Drawing.Color]::Tomato }
+    try {
+        # Check Registry for AutoConfigURL
+        $current = (Get-ItemProperty -Path $userSettingsPath -Name "AutoConfigURL" -ErrorAction SilentlyContinue).AutoConfigURL
+        if ($current) {
+            $filterStatus.Text = "● Securly Filter: ACTIVE"
+            $filterStatus.ForeColor = [System.Drawing.Color]::LimeGreen
+        } else {
+            $filterStatus.Text = "○ Securly Filter: DISABLED"
+            $filterStatus.ForeColor = [System.Drawing.Color]::Tomato
+        }
+    } catch {
+        $filterStatus.Text = "○ Securly Filter: ERROR"
+        $filterStatus.ForeColor = [System.Drawing.Color]::Orange
+    }
     
+    # Check if Classroom App is running
     $proc = Get-Process "Classroom" -ErrorAction SilentlyContinue
-    $classroomStatus.Text = if ($proc) { "● Classroom App: RUNNING" } else { "○ Classroom App: STOPPED" }
-    $classroomStatus.ForeColor = if ($proc) { [System.Drawing.Color]::LimeGreen } else { [System.Drawing.Color]::Tomato }
+    if ($proc) {
+        $classroomStatus.Text = "● Classroom App: RUNNING"
+        $classroomStatus.ForeColor = [System.Drawing.Color]::LimeGreen
+    } else {
+        $classroomStatus.Text = "○ Classroom App: STOPPED"
+        $classroomStatus.ForeColor = [System.Drawing.Color]::Tomato
+    }
 }
 
 # FIXED: Store color in .Tag to prevent the null BackColor crash
 function Create-ModernButton($text, $yPos, $color) {
     $btn = New-Object System.Windows.Forms.Button
     $btn.Text = $text; $btn.Size = New-Object System.Drawing.Size(340, 50); $btn.Location = New-Object System.Drawing.Point(30, $yPos); $btn.FlatStyle = "Flat"; $btn.BackColor = [System.Drawing.Color]::FromArgb(60, 60, 65); $btn.FlatAppearance.BorderColor = $color; $btn.FlatAppearance.BorderSize = 1; $btn.Cursor = [System.Windows.Forms.Cursors]::Hand
-    $btn.Tag = $color # Keep a local copy of the color inside the button
+    $btn.Tag = $color 
     $btn.Add_MouseEnter({ $this.BackColor = $this.Tag; $this.ForeColor = [System.Drawing.Color]::Black })
     $btn.Add_MouseLeave({ $this.BackColor = [System.Drawing.Color]::FromArgb(60, 60, 65); $this.ForeColor = [System.Drawing.Color]::White })
     return $btn
@@ -74,23 +105,25 @@ function Create-ModernButton($text, $yPos, $color) {
 $enableBtn = Create-ModernButton "ENABLE WEB FILTER" 120 ([System.Drawing.Color]::LimeGreen)
 $enableBtn.Add_Click({
     $url = "https://www-filter.c2.securly.com"
-    Set-ItemProperty -Path $userSettingsPath -Name "AutoConfigURL" -Value $url -Type String
-    Set-ItemProperty -Path $userSettingsPath -Name "ProxyEnable" -Value 0 -Type DWord
-    
-    # Binary '05' enables Auto Config Script checkbox
-    $enableBinary = [byte[]](0x46,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x05,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00)
-    Set-ItemProperty -Path "$userSettingsPath\Connections" -Name "DefaultConnectionSettings" -Value $enableBinary -Type Binary
-    Refresh-Settings
+    try {
+        Set-ItemProperty -Path $userSettingsPath -Name "AutoConfigURL" -Value $url -Type String
+        Set-ItemProperty -Path $userSettingsPath -Name "ProxyEnable" -Value 0 -Type DWord
+        $enableBinary = [byte[]](0x46,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x05,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00)
+        Set-ItemProperty -Path "$userSettingsPath\Connections" -Name "DefaultConnectionSettings" -Value $enableBinary -Type Binary
+        Refresh-Settings
+    } catch { [System.Windows.Forms.MessageBox]::Show("Failed to enable filter. Are you running as Admin?") }
 })
 $form.Controls.Add($enableBtn)
 
 # 2. DISABLE FILTER
 $disableBtn = Create-ModernButton "DISABLE WEB FILTER" 180 ([System.Drawing.Color]::Tomato)
 $disableBtn.Add_Click({
-    Remove-ItemProperty -Path $userSettingsPath -Name "AutoConfigURL" -ErrorAction SilentlyContinue
-    $disableBinary = [byte[]](0x46,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00)
-    Set-ItemProperty -Path "$userSettingsPath\Connections" -Name "DefaultConnectionSettings" -Value $disableBinary -Type Binary
-    Refresh-Settings
+    try {
+        Remove-ItemProperty -Path $userSettingsPath -Name "AutoConfigURL" -ErrorAction SilentlyContinue
+        $disableBinary = [byte[]](0x46,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00)
+        Set-ItemProperty -Path "$userSettingsPath\Connections" -Name "DefaultConnectionSettings" -Value $disableBinary -Type Binary
+        Refresh-Settings
+    } catch { }
 })
 $form.Controls.Add($disableBtn)
 
