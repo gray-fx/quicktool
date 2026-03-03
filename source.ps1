@@ -1,116 +1,114 @@
-# check = octopus
-$signature = @"
-[DllImport("wininet.dll", SetLastError = true)]
-public static extern bool InternetSetOption(IntPtr hInternet, int dwOption, IntPtr lpBuffer, int dwBufferLength);
-"@
-if (-not ([PowerShell].Assembly.GetType('Win32.WinInet'))) {
-    Add-Type -MemberDefinition $signature -Name WinInet -Namespace Win32
-}
-
-function Refresh-Settings {
-    [Win32.WinInet]::InternetSetOption([IntPtr]::Zero, 39, [IntPtr]::Zero, 0) | Out-Null
-    [Win32.WinInet]::InternetSetOption([IntPtr]::Zero, 37, [IntPtr]::Zero, 0) | Out-Null
-    Update-Status
-}
-
+# ==========================================
+# CONFIG & SETTINGS
+# ==========================================
+$port = 8282
+$url = "http://localhost:$port/"
 $userSettingsPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings"
 $classroomFolder = "C:\Program Files\Securly\Classroom"
-$classroomPath = "$classroomFolder\Classroom.exe"
 
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
+# ==========================================
+# THE HTML & CSS GUI
+# ==========================================
+$html = @"
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { background: #1e1e1e; color: white; font-family: 'Segoe UI'; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        .panel { background: #2d2d30; width: 340px; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+        button { 
+            width: 340px; height: 50px; margin: 10px 0; cursor: pointer;
+            background: #3c3c41; color: white; border: 1px solid #555; font-size: 16px; transition: 0.2s;
+        }
+        button:hover { background: #505055; }
+        .btn-enable { border-color: LimeGreen; }
+        .btn-enable:hover { background: LimeGreen; color: black; }
+        .btn-disable { border-color: Tomato; }
+        .btn-disable:hover { background: Tomato; color: black; }
+        #status { color: gray; font-size: 14px; margin-top: 20px; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="panel">
+        <div id="filter-text">Filter: Checking...</div>
+        <div id="app-text">App: Checking...</div>
+    </div>
 
-$form = New-Object System.Windows.Forms.Form
-$form.Text = "Quicktool v1.0"
-$form.Size = New-Object System.Drawing.Size(420, 600) # Increased height for Error Panel
-$form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
-$form.ForeColor = [System.Drawing.Color]::White
-$form.Font = New-Object System.Drawing.Font("Segoe UI", 10)
-$form.StartPosition = "CenterScreen"
-$form.FormBorderStyle = "FixedDialog"
-$form.MaximizeBox = $false
-$form.Topmost = $true
+    <button class="btn-enable" onclick="run('enable')">ENABLE WEB FILTER</button>
+    <button class="btn-disable" onclick="run('disable')">DISABLE WEB FILTER</button>
+    <button onclick="run('lock')">LOCK CLASSROOM</button>
+    <button class="btn-enable" onclick="run('unlock')">UNLOCK START CLASSROOM</button>
 
-# Status Panel
-$statusPanel = New-Object System.Windows.Forms.Panel
-$statusPanel.Size = New-Object System.Drawing.Size(340, 60); $statusPanel.Location = New-Object System.Drawing.Point(30, 70); $statusPanel.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 48); $form.Controls.Add($statusPanel)
+    <div class="panel" id="status">No errors detected.</div>
 
-$filterStatus = New-Object System.Windows.Forms.Label; $filterStatus.Text = "Filter: --"; $filterStatus.Location = New-Object System.Drawing.Point(10, 10); $filterStatus.Size = New-Object System.Drawing.Size(320, 20); $statusPanel.Controls.Add($filterStatus)
-$classroomStatus = New-Object System.Windows.Forms.Label; $classroomStatus.Text = "App: --"; $classroomStatus.Location = New-Object System.Drawing.Point(10, 32); $classroomStatus.Size = New-Object System.Drawing.Size(320, 20); $statusPanel.Controls.Add($classroomStatus)
+    <script>
+        async function run(cmd) {
+            document.getElementById('status').innerText = "Running " + cmd + "...";
+            try {
+                const resp = await fetch('/' + cmd);
+                const text = await resp.text();
+                document.getElementById('status').innerText = text;
+            } catch (e) {
+                document.getElementById('status').innerText = "Error connecting to script.";
+            }
+        }
+    </script>
+</body>
+</html>
+"@
 
-# Errors Panel (New)
-$errorPanel = New-Object System.Windows.Forms.Panel
-$errorPanel.Size = New-Object System.Drawing.Size(340, 60); $errorPanel.Location = New-Object System.Drawing.Point(30, 420); $errorPanel.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 48); $form.Controls.Add($errorPanel)
-$errorLabel = New-Object System.Windows.Forms.Label; $errorLabel.Text = "No errors detected."; $errorLabel.Location = New-Object System.Drawing.Point(10, 10); $errorLabel.Size = New-Object System.Drawing.Size(320, 40); $errorLabel.ForeColor = [System.Drawing.Color]::Gray; $errorPanel.Controls.Add($errorLabel)
+# ==========================================
+# THE SERVER LOGIC
+# ==========================================
+$listener = New-Object System.Net.HttpListener
+$listener.Prefixes.Add($url)
+$listener.Start()
 
-function Update-Status {
-    $current = (Get-ItemProperty -Path $userSettingsPath -Name "AutoConfigURL" -ErrorAction SilentlyContinue).AutoConfigURL
-    $filterStatus.Text = if ($current) { "● Securly Filter: ACTIVE" } else { "○ Securly Filter: DISABLED" }
-    $filterStatus.ForeColor = if ($current) { [System.Drawing.Color]::LimeGreen } else { [System.Drawing.Color]::Tomato }
-    
-    $proc = Get-Process "Classroom" -ErrorAction SilentlyContinue
-    $classroomStatus.Text = if ($proc) { "● Classroom App: RUNNING" } else { "○ Classroom App: STOPPED" }
-    $classroomStatus.ForeColor = if ($proc) { [System.Drawing.Color]::LimeGreen } else { [System.Drawing.Color]::Tomato }
+# Automatically open the GUI in the default browser
+Start-Process $url
+
+Write-Host "Server running at $url. Close this window to stop." -ForegroundColor Cyan
+
+while ($listener.IsListening) {
+    $context = $listener.GetContext()
+    $request = $context.Request
+    $response = $context.Response
+    $route = $request.RawUrl.Trim('/')
+
+    $msg = "Action Complete"
+
+    # RUN COMMANDS BASED ON BUTTON CLICK
+    switch ($route) {
+        "enable" {
+            $pac = "https://www-filter.c2.securly.com"
+            Set-ItemProperty -Path $userSettingsPath -Name "AutoConfigURL" -Value $pac -Type String
+            $eb = [byte[]](0x46,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x05,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00)
+            Set-ItemProperty -Path "$userSettingsPath\Connections" -Name "DefaultConnectionSettings" -Value $eb -Type Binary
+            $msg = "Filter Enabled"
+        }
+        "disable" {
+            Remove-ItemProperty -Path $userSettingsPath -Name "AutoConfigURL" -ErrorAction SilentlyContinue
+            $db = [byte[]](0x46,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00)
+            Set-ItemProperty -Path "$userSettingsPath\Connections" -Name "DefaultConnectionSettings" -Value $db -Type Binary
+            $msg = "Filter Disabled"
+        }
+        "lock" {
+            Get-Process "Classroom" -ErrorAction SilentlyContinue | Stop-Process -Force
+            icacls "$classroomFolder" /inheritance:r /deny Everyone:F /t | Out-Null
+            $msg = "Classroom Locked"
+        }
+        "unlock" {
+            icacls "$classroomFolder" /remove:deny Everyone /t | Out-Null
+            icacls "$classroomFolder" /grant "Everyone:(OI)(CI)F" /t | Out-Null
+            $msg = "Classroom Unlocked"
+        }
+    }
+
+    # SEND HTML BACK OR STATUS MESSAGE
+    $buffer = if ($route -eq "") { [System.Text.Encoding]::UTF8.GetBytes($html) } 
+             else { [System.Text.Encoding]::UTF8.GetBytes($msg) }
+             
+    $response.ContentLength64 = $buffer.Length
+    $response.OutputStream.Write($buffer, 0, $buffer.Length)
+    $response.Close()
 }
-
-function Create-ModernButton($text, $yPos, $color) {
-    $btn = New-Object System.Windows.Forms.Button
-    $btn.Text = $text; $btn.Size = New-Object System.Drawing.Size(340, 50); $btn.Location = New-Object System.Drawing.Point(30, $yPos); $btn.FlatStyle = "Flat"; $btn.BackColor = [System.Drawing.Color]::FromArgb(60, 60, 65); $btn.FlatAppearance.BorderColor = $color; $btn.FlatAppearance.BorderSize = 1; $btn.Cursor = [System.Windows.Forms.Cursors]::Hand
-    $btn.Tag = $color
-    $btn.Add_MouseEnter({ $this.BackColor = $this.Tag; $this.ForeColor = "Black" })
-    $btn.Add_MouseLeave({ $this.BackColor = [System.Drawing.Color]::FromArgb(60, 60, 65); $this.ForeColor = "White" })
-    return $btn
-}
-
-# 1. ENABLE
-$enableBtn = Create-ModernButton "ENABLE WEB FILTER" 150 ([System.Drawing.Color]::LimeGreen)
-$enableBtn.Add_Click({
-    try {
-        $url = "https://www-filter.c2.securly.com"
-        Set-ItemProperty -Path $userSettingsPath -Name "AutoConfigURL" -Value $url -Type String
-        $eb = [byte[]](0x46,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x05,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00)
-        Set-ItemProperty -Path "$userSettingsPath\Connections" -Name "DefaultConnectionSettings" -Value $eb -Type Binary
-        Refresh-Settings
-    } catch { $errorLabel.Text = "Enable Error: $($_.Exception.Message)"; $errorLabel.ForeColor = "Tomato" }
-})
-$form.Controls.Add($enableBtn)
-
-# 2. DISABLE
-$disableBtn = Create-ModernButton "DISABLE WEB FILTER" 210 ([System.Drawing.Color]::Tomato)
-$disableBtn.Add_Click({
-    try {
-        Remove-ItemProperty -Path $userSettingsPath -Name "AutoConfigURL" -ErrorAction SilentlyContinue
-        $db = [byte[]](0x46,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00)
-        Set-ItemProperty -Path "$userSettingsPath\Connections" -Name "DefaultConnectionSettings" -Value $db -Type Binary
-        Refresh-Settings
-    } catch { $errorLabel.Text = "Disable Error: $($_.Exception.Message)"; $errorLabel.ForeColor = "Tomato" }
-})
-$form.Controls.Add($disableBtn)
-
-# 3. KILL LOCK
-$killLockBtn = Create-ModernButton "LOCK CLASSROOM" 290 ([System.Drawing.Color]::OrangeRed)
-$killLockBtn.Add_Click({
-    try {
-        Get-Process "Classroom" -ErrorAction SilentlyContinue | Stop-Process -Force
-        takeown /f "$classroomFolder" /a /r /d y | Out-Null
-        icacls "$classroomFolder" /inheritance:r /deny Everyone:F /t | Out-Null
-        Update-Status
-    } catch { $errorLabel.Text = "Lock Error: $($_.Exception.Message)"; $errorLabel.ForeColor = "Tomato" }
-})
-$form.Controls.Add($killLockBtn)
-
-# 4. UNLOCK START (Name Reverted)
-$unlockStartBtn = Create-ModernButton "UNLOCK START CLASSROOM" 350 ([System.Drawing.Color]::LimeGreen)
-$unlockStartBtn.Add_Click({
-    try {
-        icacls "$classroomFolder" /remove:deny Everyone /t | Out-Null
-        icacls "$classroomFolder" /grant "Everyone:(OI)(CI)F" /t | Out-Null
-        Start-Sleep -Seconds 1
-        Start-Process "$classroomPath" -WorkingDirectory $classroomFolder
-        Update-Status
-    } catch { $errorLabel.Text = "Unlock Error: $($_.Exception.Message)"; $errorLabel.ForeColor = "Tomato" }
-})
-$form.Controls.Add($unlockStartBtn)
-
-$form.Add_Shown({ Update-Status; $form.Activate() })
-[void]$form.ShowDialog()
