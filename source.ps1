@@ -2,6 +2,7 @@ Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 # ==========================================
 # THE HTML GUI
+# CHECK: D
 # ==========================================
 $html = @"
 <!DOCTYPE html>
@@ -13,21 +14,23 @@ $html = @"
         .card { background: #2d2d30; width: 320px; padding: 20px; border-radius: 8px; border: 1px solid #444; text-align: center; }
         button { 
             width: 100%; height: 45px; margin: 8px 0; cursor: pointer;
-            background: #3c3c41; color: white; border: 1px solid #555; font-size: 14px; outline: none;
+            background: #3c3c41; color: white; border: 1px solid #555; font-size: 14px;
         }
         button:hover { background: #505055; border-color: #888; }
         .btn-green { border-color: LimeGreen; color: LimeGreen; }
         .btn-red { border-color: Tomato; color: Tomato; }
+        #status-bar { font-size: 11px; color: #777; margin-top: 15px; }
     </style>
 </head>
 <body>
     <div class="card">
-        <h2 style="margin-top:0">Quicktool v2.2</h2>
-        <!-- Using window.status to send commands to PowerShell -->
-        <button class="btn-green" onclick="window.status='enable'; window.status='';">ENABLE WEB FILTER</button>
-        <button class="btn-red" onclick="window.status='disable'; window.status='';">DISABLE WEB FILTER</button>
-        <button onclick="window.status='lock'; window.status='';">LOCK CLASSROOM</button>
-        <button class="btn-green" onclick="window.status='unlock'; window.status='';">UNLOCK START CLASSROOM</button>
+        <h2 style="margin-top:0">Quicktool v2.3</h2>
+        <!-- Buttons now try to "Navigate" to a fake URL that PowerShell catches -->
+        <button class="btn-green" onclick="window.location='cmd://enable'">ENABLE WEB FILTER</button>
+        <button class="btn-red" onclick="window.location='cmd://disable'">DISABLE WEB FILTER</button>
+        <button onclick="window.location='cmd://lock'">LOCK CLASSROOM</button>
+        <button class="btn-green" onclick="window.location='cmd://unlock'">UNLOCK START CLASSROOM</button>
+        <div id="status-bar">Ready.</div>
     </div>
 </body>
 </html>
@@ -42,17 +45,25 @@ $form.Topmost = $true
 $browser = New-Object System.Windows.Forms.WebBrowser
 $browser.Dock = "Fill"
 $browser.ScrollBarsEnabled = $false
-# This is the "Ear" that listens to the HTML
 $browser.ScriptErrorsSuppressed = $true
 
-# THE SIGNAL LISTENER
-$browser.add_StatusTextChanged({
-    $cmd = $browser.StatusText
-    if ($cmd -ne "" -and $cmd -ne "done") {
+# THE NAVIGATE INTERCEPTOR (The most reliable method)
+$browser.add_Navigating({
+    param($sender, $e)
+    $url = $e.Url.ToString()
+    
+    # If the URL starts with our fake protocol 'cmd://'
+    if ($url -like "cmd://*") {
+        # 1. STOP the browser from actually trying to load the fake page
+        $e.Cancel = $true
+        
+        # 2. Extract the command (e.g., 'enable')
+        $cmd = $url.Replace("cmd://", "").TrimEnd("/")
         
         $userPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings"
         $folder = "C:\Program Files\Securly\Classroom"
         
+        # 3. RUN THE POWERSHELL CODE
         switch ($cmd) {
             "enable" {
                 $pac = "https://www-filter.c2.securly.com"
