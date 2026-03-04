@@ -1,32 +1,8 @@
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 # ==========================================
-# FIX: THE COM-VISIBLE BRIDGE
-# CHECK: STRAW
-# ==========================================
-$code = @"
-using System;
-using System.Runtime.InteropServices;
-
-[ComVisible(true)]
-public class ScriptBridge {
-    public void Run(string cmd) {
-        Microsoft.PowerShell.Commands.Internal.WinRT.Interop.GlobalState.LastCmd = cmd;
-    }
-}
-public static class GlobalState {
-    public static string LastCmd;
-}
-"@
-# Note: We use a simpler bridge for PS 5.1 compatibility
-$Object = New-Object -TypeName PSObject
-$Object | Add-Member -MemberType ScriptMethod -Name "Run" -Value {
-    param($cmd)
-    $Global:TriggerCmd = $cmd
-}
-
-# ==========================================
 # THE HTML GUI
+# CHECK: ALMOND
 # ==========================================
 $html = @"
 <!DOCTYPE html>
@@ -47,11 +23,11 @@ $html = @"
 </head>
 <body>
     <div class="card">
-        <h2 style="margin-top:0">Quicktool v2.0</h2>
-        <button class="btn-green" onclick="window.external.Run('enable')">ENABLE WEB FILTER</button>
-        <button class="btn-red" onclick="window.external.Run('disable')">DISABLE WEB FILTER</button>
-        <button onclick="window.external.Run('lock')">LOCK CLASSROOM</button>
-        <button class="btn-green" onclick="window.external.Run('unlock')">UNLOCK START CLASSROOM</button>
+        <h2 style="margin-top:0">Quicktool v2.1</h2>
+        <button class="btn-green" onclick="document.title='cmd:enable'">ENABLE WEB FILTER</button>
+        <button class="btn-red" onclick="document.title='cmd:disable'">DISABLE WEB FILTER</button>
+        <button onclick="document.title='cmd:lock'">LOCK CLASSROOM</button>
+        <button class="btn-green" onclick="document.title='cmd:unlock'">UNLOCK START CLASSROOM</button>
     </div>
 </body>
 </html>
@@ -66,15 +42,15 @@ $form.Topmost = $true
 $browser = New-Object System.Windows.Forms.WebBrowser
 $browser.Dock = "Fill"
 $browser.ScrollBarsEnabled = $false
-$browser.ObjectForScripting = $Object # THIS IS THE LINE CAUSING THE ERROR - FIXED BY PSObject ABOVE
 
-# TIMER TO EXECUTE COMMANDS
+# THE NEW "WATCHER" TIMER (No COM/ObjectForScripting needed)
 $timer = New-Object System.Windows.Forms.Timer
 $timer.Interval = 100
 $timer.Add_Tick({
-    if ($Global:TriggerCmd) {
-        $cmd = $Global:TriggerCmd
-        $Global:TriggerCmd = $null
+    # Check if the HTML changed the window title
+    if ($form.Text -like "cmd:*") {
+        $cmd = $form.Text.Replace("cmd:", "")
+        $form.Text = "Quicktool" # Reset the title immediately
         
         $userPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings"
         $folder = "C:\Program Files\Securly\Classroom"
