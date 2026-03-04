@@ -2,7 +2,6 @@ Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 # ==========================================
 # THE HTML GUI
-# CHECK: ALMOND
 # ==========================================
 $html = @"
 <!DOCTYPE html>
@@ -14,7 +13,7 @@ $html = @"
         .card { background: #2d2d30; width: 320px; padding: 20px; border-radius: 8px; border: 1px solid #444; text-align: center; }
         button { 
             width: 100%; height: 45px; margin: 8px 0; cursor: pointer;
-            background: #3c3c41; color: white; border: 1px solid #555; font-size: 14px;
+            background: #3c3c41; color: white; border: 1px solid #555; font-size: 14px; outline: none;
         }
         button:hover { background: #505055; border-color: #888; }
         .btn-green { border-color: LimeGreen; color: LimeGreen; }
@@ -23,11 +22,12 @@ $html = @"
 </head>
 <body>
     <div class="card">
-        <h2 style="margin-top:0">Quicktool v2.1</h2>
-        <button class="btn-green" onclick="document.title='cmd:enable'">ENABLE WEB FILTER</button>
-        <button class="btn-red" onclick="document.title='cmd:disable'">DISABLE WEB FILTER</button>
-        <button onclick="document.title='cmd:lock'">LOCK CLASSROOM</button>
-        <button class="btn-green" onclick="document.title='cmd:unlock'">UNLOCK START CLASSROOM</button>
+        <h2 style="margin-top:0">Quicktool v2.2</h2>
+        <!-- Using window.status to send commands to PowerShell -->
+        <button class="btn-green" onclick="window.status='enable'; window.status='';">ENABLE WEB FILTER</button>
+        <button class="btn-red" onclick="window.status='disable'; window.status='';">DISABLE WEB FILTER</button>
+        <button onclick="window.status='lock'; window.status='';">LOCK CLASSROOM</button>
+        <button class="btn-green" onclick="window.status='unlock'; window.status='';">UNLOCK START CLASSROOM</button>
     </div>
 </body>
 </html>
@@ -42,15 +42,13 @@ $form.Topmost = $true
 $browser = New-Object System.Windows.Forms.WebBrowser
 $browser.Dock = "Fill"
 $browser.ScrollBarsEnabled = $false
+# This is the "Ear" that listens to the HTML
+$browser.ScriptErrorsSuppressed = $true
 
-# THE NEW "WATCHER" TIMER (No COM/ObjectForScripting needed)
-$timer = New-Object System.Windows.Forms.Timer
-$timer.Interval = 100
-$timer.Add_Tick({
-    # Check if the HTML changed the window title
-    if ($form.Text -like "cmd:*") {
-        $cmd = $form.Text.Replace("cmd:", "")
-        $form.Text = "Quicktool" # Reset the title immediately
+# THE SIGNAL LISTENER
+$browser.add_StatusTextChanged({
+    $cmd = $browser.StatusText
+    if ($cmd -ne "" -and $cmd -ne "done") {
         
         $userPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings"
         $folder = "C:\Program Files\Securly\Classroom"
@@ -86,8 +84,6 @@ $timer.Add_Tick({
     }
 })
 
-$timer.Start()
 $browser.DocumentText = $html
 $form.Controls.Add($browser)
 [void]$form.ShowDialog()
-$timer.Stop()
