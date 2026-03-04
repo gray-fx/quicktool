@@ -1,24 +1,6 @@
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 # ==========================================
-# THE C# BRIDGE (Fixes 'Buttons do nothing')
-# CHECK: PURPLE FOX
-# ==========================================
-$code = @"
-using System;
-using System.Runtime.InteropServices;
-
-[ComVisible(true)]
-public class ScriptBridge {
-    public void Run(string cmd) {
-        // We use an environment variable to pass data back to PowerShell instantly
-        Environment.SetEnvironmentVariable("LAST_CMD", cmd, EnvironmentVariableTarget.Process);
-    }
-}
-"@
-Add-Type -TypeDefinition $code
-
-# ==========================================
 # THE HTML GUI
 # ==========================================
 $html = @"
@@ -40,11 +22,12 @@ $html = @"
 </head>
 <body>
     <div class="card">
-        <h2 style="margin-top:0">Quicktool v2.6</h2>
-        <button class="btn-green" onclick="window.external.Run('enable')">ENABLE WEB FILTER</button>
-        <button class="btn-red" onclick="window.external.Run('disable')">DISABLE WEB FILTER</button>
-        <button onclick="window.external.Run('lock')">LOCK CLASSROOM</button>
-        <button class="btn-green" onclick="window.external.Run('unlock')">UNLOCK START CLASSROOM</button>
+        <h2 style="margin-top:0">Quicktool v2.7</h2>
+        <!-- Buttons now change the Window Title to send a command -->
+        <button class="btn-green" onclick="document.title='run:enable'">ENABLE WEB FILTER</button>
+        <button class="btn-red" onclick="document.title='run:disable'">DISABLE WEB FILTER</button>
+        <button onclick="document.title='run:lock'">LOCK CLASSROOM</button>
+        <button class="btn-green" onclick="document.title='run:unlock'">UNLOCK START CLASSROOM</button>
     </div>
 </body>
 </html>
@@ -59,15 +42,15 @@ $form.Topmost = $true
 $browser = New-Object System.Windows.Forms.WebBrowser
 $browser.Dock = "Fill"
 $browser.ScrollBarsEnabled = $false
-$browser.ObjectForScripting = New-Object ScriptBridge
 
-# THE LISTENER (Checks Environment Variable for clicks)
+# THE WATCHER TIMER (No Bridge needed)
 $timer = New-Object System.Windows.Forms.Timer
-$timer.Interval = 50
+$timer.Interval = 100
 $timer.Add_Tick({
-    $cmd = [Environment]::GetEnvironmentVariable("LAST_CMD", "Process")
-    if ($cmd) {
-        [Environment]::SetEnvironmentVariable("LAST_CMD", $null, "Process")
+    # PowerShell watches the form title for the "run:" signal
+    if ($form.Text -like "run:*") {
+        $cmd = $form.Text.Replace("run:", "")
+        $form.Text = "Quicktool" # Reset title immediately
         
         $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings"
         $folder = "C:\Program Files\Securly\Classroom"
