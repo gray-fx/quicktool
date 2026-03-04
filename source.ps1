@@ -2,6 +2,7 @@ Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 # ==========================================
 # THE HTML GUI
+# CHECK: RED SQUID
 # ==========================================
 $html = @"
 <!DOCTYPE html>
@@ -22,12 +23,12 @@ $html = @"
 </head>
 <body>
     <div class="card">
-        <h2 style="margin-top:0">Quicktool v2.7</h2>
-        <!-- Buttons now change the Window Title to send a command -->
-        <button class="btn-green" onclick="document.title='run:enable'">ENABLE WEB FILTER</button>
-        <button class="btn-red" onclick="document.title='run:disable'">DISABLE WEB FILTER</button>
-        <button onclick="document.title='run:lock'">LOCK CLASSROOM</button>
-        <button class="btn-green" onclick="document.title='run:unlock'">UNLOCK START CLASSROOM</button>
+        <h2 style="margin-top:0">Quicktool v2.8</h2>
+        <!-- Buttons now trigger a fake navigation link -->
+        <button class="btn-green" onclick="window.location='cmd://enable'">ENABLE WEB FILTER</button>
+        <button class="btn-red" onclick="window.location='cmd://disable'">DISABLE WEB FILTER</button>
+        <button onclick="window.location='cmd://lock'">LOCK CLASSROOM</button>
+        <button class="btn-green" onclick="window.location='cmd://unlock'">UNLOCK START CLASSROOM</button>
     </div>
 </body>
 </html>
@@ -42,15 +43,19 @@ $form.Topmost = $true
 $browser = New-Object System.Windows.Forms.WebBrowser
 $browser.Dock = "Fill"
 $browser.ScrollBarsEnabled = $false
+$browser.ScriptErrorsSuppressed = $true
 
-# THE WATCHER TIMER (No Bridge needed)
-$timer = New-Object System.Windows.Forms.Timer
-$timer.Interval = 100
-$timer.Add_Tick({
-    # PowerShell watches the form title for the "run:" signal
-    if ($form.Text -like "run:*") {
-        $cmd = $form.Text.Replace("run:", "")
-        $form.Text = "Quicktool" # Reset title immediately
+# THE INTERCEPTOR (Listens for the fake links)
+$browser.add_Navigating({
+    param($sender, $e)
+    $url = $e.Url.ToString()
+    
+    if ($url -like "cmd://*") {
+        # 1. CANCEL the actual navigation so the browser stays on our GUI
+        $e.Cancel = $true
+        
+        # 2. Extract the command from the URL
+        $cmd = $url.Replace("cmd://", "").TrimEnd("/")
         
         $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings"
         $folder = "C:\Program Files\Securly\Classroom"
@@ -86,8 +91,6 @@ $timer.Add_Tick({
     }
 })
 
-$timer.Start()
 $browser.DocumentText = $html
 $form.Controls.Add($browser)
 [void]$form.ShowDialog()
-$timer.Stop()
