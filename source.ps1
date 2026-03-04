@@ -1,8 +1,9 @@
-# Required for HTML-to-PowerShell communication
-# check: famar
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
-# This block fixes the "ComVisible" error
+# ==========================================
+# FIX: THE COM-VISIBLE BRIDGE
+# CHECK: STRAW
+# ==========================================
 $code = @"
 using System;
 using System.Runtime.InteropServices;
@@ -10,15 +11,23 @@ using System.Runtime.InteropServices;
 [ComVisible(true)]
 public class ScriptBridge {
     public void Run(string cmd) {
-        System.Management.Automation.PowerShell ps = System.Management.Automation.PowerShell.Create();
-        ps.AddScript("param(`$cmd) `$Global:LastCmd = `$cmd");
-        ps.AddArgument(cmd);
-        ps.Invoke();
+        Microsoft.PowerShell.Commands.Internal.WinRT.Interop.GlobalState.LastCmd = cmd;
     }
 }
+public static class GlobalState {
+    public static string LastCmd;
+}
 "@
-Add-Type -TypeDefinition $code -ReferencedAssemblies "System.Windows.Forms", "System.Management.Automation"
+# Note: We use a simpler bridge for PS 5.1 compatibility
+$Object = New-Object -TypeName PSObject
+$Object | Add-Member -MemberType ScriptMethod -Name "Run" -Value {
+    param($cmd)
+    $Global:TriggerCmd = $cmd
+}
 
+# ==========================================
+# THE HTML GUI
+# ==========================================
 $html = @"
 <!DOCTYPE html>
 <html>
@@ -38,7 +47,7 @@ $html = @"
 </head>
 <body>
     <div class="card">
-        <h2 style="margin-top:0">Quicktool v1.9</h2>
+        <h2 style="margin-top:0">Quicktool v2.0</h2>
         <button class="btn-green" onclick="window.external.Run('enable')">ENABLE WEB FILTER</button>
         <button class="btn-red" onclick="window.external.Run('disable')">DISABLE WEB FILTER</button>
         <button onclick="window.external.Run('lock')">LOCK CLASSROOM</button>
@@ -57,15 +66,15 @@ $form.Topmost = $true
 $browser = New-Object System.Windows.Forms.WebBrowser
 $browser.Dock = "Fill"
 $browser.ScrollBarsEnabled = $false
-$browser.ObjectForScripting = New-Object ScriptBridge
+$browser.ObjectForScripting = $Object # THIS IS THE LINE CAUSING THE ERROR - FIXED BY PSObject ABOVE
 
-# Monitor the bridge for clicks
+# TIMER TO EXECUTE COMMANDS
 $timer = New-Object System.Windows.Forms.Timer
 $timer.Interval = 100
 $timer.Add_Tick({
-    if ($Global:LastCmd) {
-        $cmd = $Global:LastCmd
-        $Global:LastCmd = $null
+    if ($Global:TriggerCmd) {
+        $cmd = $Global:TriggerCmd
+        $Global:TriggerCmd = $null
         
         $userPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings"
         $folder = "C:\Program Files\Securly\Classroom"
