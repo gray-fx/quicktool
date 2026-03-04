@@ -1,8 +1,25 @@
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 # ==========================================
+# THE C# BRIDGE (Fixes 'Buttons do nothing')
+# CHECK: PURPLE FOX
+# ==========================================
+$code = @"
+using System;
+using System.Runtime.InteropServices;
+
+[ComVisible(true)]
+public class ScriptBridge {
+    public void Run(string cmd) {
+        // We use an environment variable to pass data back to PowerShell instantly
+        Environment.SetEnvironmentVariable("LAST_CMD", cmd, EnvironmentVariableTarget.Process);
+    }
+}
+"@
+Add-Type -TypeDefinition $code
+
+# ==========================================
 # THE HTML GUI
-# CHECK: ORANGE
 # ==========================================
 $html = @"
 <!DOCTYPE html>
@@ -23,11 +40,11 @@ $html = @"
 </head>
 <body>
     <div class="card">
-        <h2 style="margin-top:0">Quicktool v2.5</h2>
-        <button class="btn-green" onclick="window.location='cmd://enable'">ENABLE WEB FILTER</button>
-        <button class="btn-red" onclick="window.location='cmd://disable'">DISABLE WEB FILTER</button>
-        <button onclick="window.location='cmd://lock'">LOCK CLASSROOM</button>
-        <button class="btn-green" onclick="window.location='cmd://unlock'">UNLOCK START CLASSROOM</button>
+        <h2 style="margin-top:0">Quicktool v2.6</h2>
+        <button class="btn-green" onclick="window.external.Run('enable')">ENABLE WEB FILTER</button>
+        <button class="btn-red" onclick="window.external.Run('disable')">DISABLE WEB FILTER</button>
+        <button onclick="window.external.Run('lock')">LOCK CLASSROOM</button>
+        <button class="btn-green" onclick="window.external.Run('unlock')">UNLOCK START CLASSROOM</button>
     </div>
 </body>
 </html>
@@ -42,17 +59,16 @@ $form.Topmost = $true
 $browser = New-Object System.Windows.Forms.WebBrowser
 $browser.Dock = "Fill"
 $browser.ScrollBarsEnabled = $false
-$browser.ScriptErrorsSuppressed = $true
+$browser.ObjectForScripting = New-Object ScriptBridge
 
-$browser.add_Navigating({
-    param($sender, $e)
-    $url = $e.Url.ToString()
-    
-    if ($url -like "cmd://*") {
-        $e.Cancel = $true
-        $cmd = $url.Replace("cmd://", "").TrimEnd("/")
+# THE LISTENER (Checks Environment Variable for clicks)
+$timer = New-Object System.Windows.Forms.Timer
+$timer.Interval = 50
+$timer.Add_Tick({
+    $cmd = [Environment]::GetEnvironmentVariable("LAST_CMD", "Process")
+    if ($cmd) {
+        [Environment]::SetEnvironmentVariable("LAST_CMD", $null, "Process")
         
-        # This path works for the current user even when running as Admin
         $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings"
         $folder = "C:\Program Files\Securly\Classroom"
         
@@ -60,13 +76,11 @@ $browser.add_Navigating({
             "enable" {
                 $pac = "https://www-filter.c2.securly.com"
                 Set-ItemProperty -Path $regPath -Name "AutoConfigURL" -Value $pac -Type String
-                # Binary '05' enables the checkbox in LAN Settings
                 $eb = [byte[]](0x46,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x05,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00)
                 Set-ItemProperty -Path "$regPath\Connections" -Name "DefaultConnectionSettings" -Value $eb -Type Binary
             }
             "disable" {
                 Remove-ItemProperty -Path $regPath -Name "AutoConfigURL" -ErrorAction SilentlyContinue
-                # Binary '01' disables the checkbox
                 $db = [byte[]](0x46,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00)
                 Set-ItemProperty -Path "$regPath\Connections" -Name "DefaultConnectionSettings" -Value $db -Type Binary
             }
@@ -86,17 +100,11 @@ $browser.add_Navigating({
                 }
             }
         }
-        # Force Windows to apply the changes immediately
-        $sig = @"
-        [DllImport("wininet.dll", SetLastError = true)]
-        public static extern bool InternetSetOption(IntPtr hInternet, int dwOption, IntPtr lpBuffer, int dwBufferLength);
-"@
-        Add-Type -MemberDefinition $sig -Name WinInet -Namespace Win32 -ErrorAction SilentlyContinue
-        [Win32.WinInet]::InternetSetOption([IntPtr]::Zero, 39, [IntPtr]::Zero, 0) | Out-Null
-        [Win32.WinInet]::InternetSetOption([IntPtr]::Zero, 37, [IntPtr]::Zero, 0) | Out-Null
     }
 })
 
+$timer.Start()
 $browser.DocumentText = $html
 $form.Controls.Add($browser)
 [void]$form.ShowDialog()
+$timer.Stop()
