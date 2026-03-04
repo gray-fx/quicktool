@@ -1,19 +1,15 @@
+# ==========================================
+# 1. check new redss
+# ==========================================
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
-# ==========================================
-# 1. CHECK GREEN GIRAFFE
-# ==========================================
+# This block is safe to run multiple times
 $sig = @"
 [DllImport("wininet.dll", SetLastError = true)]
 public static extern bool InternetSetOption(IntPtr hInternet, int dwOption, IntPtr lpBuffer, int dwBufferLength);
 "@
 if (-not ([PowerShell].Assembly.GetType('Win32.WinInet'))) {
-    Add-Type -MemberDefinition $sig -Name WinInet -Namespace Win32
-}
-
-function Refresh-Internet {
-    [Win32.WinInet]::InternetSetOption([IntPtr]::Zero, 39, [IntPtr]::Zero, 0) | Out-Null
-    [Win32.WinInet]::InternetSetOption([IntPtr]::Zero, 37, [IntPtr]::Zero, 0) | Out-Null
+    Add-Type -MemberDefinition $sig -Name WinInet -Namespace Win32 -ErrorAction SilentlyContinue
 }
 
 # ==========================================
@@ -38,7 +34,7 @@ $html = @"
 </head>
 <body>
     <div class="card">
-        <h2 style="margin-top:0">Quicktool v2.9</h2>
+        <h2 style="margin-top:0">Quicktool v3.0</h2>
         <button class="btn-green" onclick="window.location='cmd://enable'">ENABLE WEB FILTER</button>
         <button class="btn-red" onclick="window.location='cmd://disable'">DISABLE WEB FILTER</button>
         <button onclick="window.location='cmd://lock'">LOCK CLASSROOM</button>
@@ -59,9 +55,7 @@ $browser.Dock = "Fill"
 $browser.ScrollBarsEnabled = $false
 $browser.ScriptErrorsSuppressed = $true
 
-# ==========================================
-# 3. THE INTERCEPTOR (Functional Logic)
-# ==========================================
+# THE INTERCEPTOR (Fixed Functional Logic)
 $browser.add_Navigating({
     param($sender, $e)
     $url = $e.Url.ToString()
@@ -70,6 +64,7 @@ $browser.add_Navigating({
         $e.Cancel = $true
         $cmd = $url.Replace("cmd://", "").TrimEnd("/")
         
+        # Explicit HKCU path
         $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings"
         $folder = "C:\Program Files\Securly\Classroom"
         
@@ -77,15 +72,16 @@ $browser.add_Navigating({
             "enable" {
                 $pac = "https://www-filter.c2.securly.com"
                 Set-ItemProperty -Path $regPath -Name "AutoConfigURL" -Value $pac -Type String
+                # Force the binary checkbox state
                 $eb = [byte[]](0x46,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x05,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00)
                 Set-ItemProperty -Path "$regPath\Connections" -Name "DefaultConnectionSettings" -Value $eb -Type Binary
-                Refresh-Internet
+                [Win32.WinInet]::InternetSetOption([IntPtr]::Zero, 39, [IntPtr]::Zero, 0) | Out-Null
             }
             "disable" {
                 Remove-ItemProperty -Path $regPath -Name "AutoConfigURL" -ErrorAction SilentlyContinue
                 $db = [byte[]](0x46,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00)
                 Set-ItemProperty -Path "$regPath\Connections" -Name "DefaultConnectionSettings" -Value $db -Type Binary
-                Refresh-Internet
+                [Win32.WinInet]::InternetSetOption([IntPtr]::Zero, 39, [IntPtr]::Zero, 0) | Out-Null
             }
             "lock" {
                 Get-Process "Classroom" -ErrorAction SilentlyContinue | Stop-Process -Force
