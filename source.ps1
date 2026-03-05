@@ -1,12 +1,13 @@
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 # ==========================================
-# 1. FORCE SYSTEM REFRESH (Pre-Loaded)
+# 1. GPO OVERRIDE PATHS (The Fix)
 # ==========================================
-$sig = '[DllImport("wininet.dll", SetLastError = true)] public static extern bool InternetSetOption(IntPtr hInternet, int dwOption, IntPtr lpBuffer, int dwBufferLength);'
-if (-not ([PowerShell].Assembly.GetType('Win32.WinInet'))) {
-    Add-Type -MemberDefinition $sig -Name WinInet -Namespace Win32 -ErrorAction SilentlyContinue
-}
+$policyPath = "HKLM:\Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings"
+$userPath   = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings"
+
+# Ensure the Policy Key exists (Prevents 'Path not found' crash)
+if (-not (Test-Path $policyPath)) { New-Item -Path $policyPath -Force | Out-Null }
 
 # ==========================================
 # 2. THE HTML GUI
@@ -24,7 +25,7 @@ $html = @"
 </head>
 <body>
     <div class="card">
-        <h2>Quicktool v3.5</h2>
+        <h2>Quicktool v4.0 (GPO Bypass)</h2>
         <button onclick="window.location='cmd://enable'">ENABLE WEB FILTER</button>
         <button onclick="window.location='cmd://disable'">DISABLE WEB FILTER</button>
         <button onclick="window.location='cmd://lock'">LOCK CLASSROOM</button>
@@ -38,50 +39,39 @@ $form = New-Object System.Windows.Forms.Form
 $form.Text = "Quicktool"; $form.Size = New-Object System.Drawing.Size(400, 450); $form.Topmost = $true
 $browser = New-Object System.Windows.Forms.WebBrowser; $browser.Dock = "Fill"; $browser.ScriptErrorsSuppressed = $true
 
-# ==========================================
-# 3. THE INTERCEPTOR (GPO-Aware Logic)
-# ==========================================
 $browser.add_Navigating({
     param($s, $e)
     if ($e.Url.ToString() -like "cmd://*") {
         $e.Cancel = $true
         $cmd = $e.Url.ToString().Replace("cmd://", "").TrimEnd("/")
         
-        $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings"
-        $conPath = "$regPath\Connections"
-        $folder  = "C:\Program Files\Securly\Classroom"
-
         switch ($cmd) {
             "enable" {
                 $pac = "https://www-filter.c2.securly.com"
-                # Update PAC URL
-                Set-ItemProperty -Path $regPath -Name "AutoConfigURL" -Value $pac -Type String
-                # Update Binary '05' (Required to CHECK the box)
-                $eb = [byte[]](0x46,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x05,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00)
-                Set-ItemProperty -Path $conPath -Name "DefaultConnectionSettings" -Value $eb -Type Binary
-                # Force WinInet to reload
-                [Win32.WinInet]::InternetSetOption([IntPtr]::Zero, 39, [IntPtr]::Zero, 0) | Out-Null
-                Write-Host "Filter Enabled." -ForegroundColor Green
+                # FORCE PER-USER SETTINGS (Tells GPO to stop forcing per-machine)
+                Set-ItemProperty -Path $policyPath -Name "ProxySettingsPerUser" -Value 1 -Type DWord
+                # Apply PAC to both User and Policy hives
+                Set-ItemProperty -Path $policyPath -Name "AutoConfigURL" -Value $pac -Type String
+                Set-ItemProperty -Path $userPath -Name "AutoConfigURL" -Value $pac -Type String
+                Write-Host "GPO Overridden: Filter Enabled." -ForegroundColor Green
             }
             "disable" {
-                Remove-ItemProperty -Path $regPath -Name "AutoConfigURL" -ErrorAction SilentlyContinue
-                # Binary '01' (Required to UNCHECK the box)
-                $db = [byte[]](0x46,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00)
-                Set-ItemProperty -Path $conPath -Name "DefaultConnectionSettings" -Value $db -Type Binary
-                [Win32.WinInet]::InternetSetOption([IntPtr]::Zero, 39, [IntPtr]::Zero, 0) | Out-Null
+                # Turn off the override and clear settings
+                Set-ItemProperty -Path $policyPath -Name "ProxySettingsPerUser" -Value 1 -Type DWord
+                Remove-ItemProperty -Path $policyPath -Name "AutoConfigURL" -ErrorAction SilentlyContinue
+                Remove-ItemProperty -Path $userPath -Name "AutoConfigURL" -ErrorAction SilentlyContinue
                 Write-Host "Filter Disabled." -ForegroundColor Yellow
             }
             "lock" {
                 Get-Process "Classroom" -ErrorAction SilentlyContinue | Stop-Process -Force
+                $folder = "C:\Program Files\Securly\Classroom"
                 takeown /f "$folder" /a /r /d y | Out-Null
                 icacls "$folder" /inheritance:r /deny Everyone:F /t /q | Out-Null
-                Write-Host "Classroom Locked." -ForegroundColor Red
             }
             "unlock" {
+                $folder = "C:\Program Files\Securly\Classroom"
                 icacls "$folder" /remove:deny Everyone /t /q | Out-Null
                 icacls "$folder" /grant Everyone:F /t /q | Out-Null
-                if (Test-Path "$folder\Classroom.exe") { Start-Process "$folder\Classroom.exe" -WorkingDirectory $folder }
-                Write-Host "Classroom Unlocked." -ForegroundColor Cyan
             }
         }
     }
