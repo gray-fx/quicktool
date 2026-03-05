@@ -1,19 +1,24 @@
-# ==========================================
-# 1. check new redss
-# ==========================================
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
-# This block is safe to run multiple times
-$sig = @"
-[DllImport("wininet.dll", SetLastError = true)]
-public static extern bool InternetSetOption(IntPtr hInternet, int dwOption, IntPtr lpBuffer, int dwBufferLength);
-"@
-if (-not ([PowerShell].Assembly.GetType('Win32.WinInet'))) {
-    Add-Type -MemberDefinition $sig -Name WinInet -Namespace Win32 -ErrorAction SilentlyContinue
+# ==========================================
+# 1. s9732r3
+# ==========================================
+$userSID = (Get-Process explorer | Select-Object -First 1 -ExpandProperty Id | Get-WmiObject -Query "Select * from Win32_Process Where ProcessId = $($_)" | ForEach-Object { $_.GetOwner().User } | ForEach-Object { (New-Object System.Security.Principal.NTAccount($_)).Translate([System.Security.Principal.SecurityIdentifier]).Value })
+$regPath = "Registry::HKEY_USERS\$userSID\Software\Microsoft\Windows\CurrentVersion\Internet Settings"
+$folder = "C:\Program Files\Securly\Classroom"
+
+# ==========================================
+# 2. FORCE REFRESH FUNCTION
+# ==========================================
+function Refresh-Settings {
+    $sig = '[DllImport("wininet.dll", SetLastError = true)] public static extern bool InternetSetOption(IntPtr hInternet, int dwOption, IntPtr lpBuffer, int dwBufferLength);'
+    $type = Add-Type -MemberDefinition $sig -Name WinInet -Namespace Win32 -PassThru -ErrorAction SilentlyContinue
+    $type::InternetSetOption([IntPtr]::Zero, 39, [IntPtr]::Zero, 0) | Out-Null
+    $type::InternetSetOption([IntPtr]::Zero, 37, [IntPtr]::Zero, 0) | Out-Null
 }
 
 # ==========================================
-# 2. THE HTML GUI
+# 3. THE GUI & LOGIC
 # ==========================================
 $html = @"
 <!DOCTYPE html>
@@ -23,80 +28,57 @@ $html = @"
     <style>
         body { background: #1e1e1e; color: white; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; padding: 20px; overflow: hidden; }
         .card { background: #2d2d30; width: 320px; padding: 20px; border-radius: 8px; border: 1px solid #444; text-align: center; }
-        button { 
-            width: 100%; height: 45px; margin: 8px 0; cursor: pointer;
-            background: #3c3c41; color: white; border: 1px solid #555; font-size: 14px;
-        }
+        button { width: 100%; height: 45px; margin: 8px 0; cursor: pointer; background: #3c3c41; color: white; border: 1px solid #555; font-size: 14px; }
         button:hover { background: #505055; border-color: #888; }
-        .btn-green { border-color: LimeGreen; color: LimeGreen; }
-        .btn-red { border-color: Tomato; color: Tomato; }
     </style>
 </head>
 <body>
     <div class="card">
-        <h2 style="margin-top:0">Quicktool v3.0</h2>
-        <button class="btn-green" onclick="window.location='cmd://enable'">ENABLE WEB FILTER</button>
-        <button class="btn-red" onclick="window.location='cmd://disable'">DISABLE WEB FILTER</button>
+        <h2 style="margin-top:0">Quicktool v3.2</h2>
+        <button onclick="window.location='cmd://enable'">ENABLE WEB FILTER</button>
+        <button onclick="window.location='cmd://disable'">DISABLE WEB FILTER</button>
         <button onclick="window.location='cmd://lock'">LOCK CLASSROOM</button>
-        <button class="btn-green" onclick="window.location='cmd://unlock'">UNLOCK START CLASSROOM</button>
+        <button onclick="window.location='cmd://unlock'">UNLOCK CLASSROOM</button>
     </div>
 </body>
 </html>
 "@
 
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "Quicktool"
-$form.Size = New-Object System.Drawing.Size(400, 450)
-$form.StartPosition = "CenterScreen"
-$form.Topmost = $true
+$form.Text = "Quicktool"; $form.Size = New-Object System.Drawing.Size(400, 450); $form.Topmost = $true
+$browser = New-Object System.Windows.Forms.WebBrowser; $browser.Dock = "Fill"; $browser.ScriptErrorsSuppressed = $true
 
-$browser = New-Object System.Windows.Forms.WebBrowser
-$browser.Dock = "Fill"
-$browser.ScrollBarsEnabled = $false
-$browser.ScriptErrorsSuppressed = $true
-
-# THE INTERCEPTOR (Fixed Functional Logic)
 $browser.add_Navigating({
-    param($sender, $e)
-    $url = $e.Url.ToString()
-    
-    if ($url -like "cmd://*") {
+    param($s, $e)
+    if ($e.Url.ToString() -like "cmd://*") {
         $e.Cancel = $true
-        $cmd = $url.Replace("cmd://", "").TrimEnd("/")
-        
-        # Explicit HKCU path
-        $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings"
-        $folder = "C:\Program Files\Securly\Classroom"
-        
+        $cmd = $e.Url.ToString().Replace("cmd://", "").TrimEnd("/")
+        Write-Host "Running Command: $cmd" -ForegroundColor Yellow
+
         switch ($cmd) {
             "enable" {
                 $pac = "https://www-filter.c2.securly.com"
                 Set-ItemProperty -Path $regPath -Name "AutoConfigURL" -Value $pac -Type String
-                # Force the binary checkbox state
-                $eb = [byte[]](0x46,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x05,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00)
-                Set-ItemProperty -Path "$regPath\Connections" -Name "DefaultConnectionSettings" -Value $eb -Type Binary
-                [Win32.WinInet]::InternetSetOption([IntPtr]::Zero, 39, [IntPtr]::Zero, 0) | Out-Null
+                # Binary bit '05' is what actually checks the box in LAN Settings
+                $bin = [byte[]](0x46,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x05,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00)
+                Set-ItemProperty -Path "$regPath\Connections" -Name "DefaultConnectionSettings" -Value $bin -Type Binary
+                Refresh-Settings
             }
             "disable" {
                 Remove-ItemProperty -Path $regPath -Name "AutoConfigURL" -ErrorAction SilentlyContinue
-                $db = [byte[]](0x46,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00)
-                Set-ItemProperty -Path "$regPath\Connections" -Name "DefaultConnectionSettings" -Value $db -Type Binary
-                [Win32.WinInet]::InternetSetOption([IntPtr]::Zero, 39, [IntPtr]::Zero, 0) | Out-Null
+                $bin = [byte[]](0x46,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00)
+                Set-ItemProperty -Path "$regPath\Connections" -Name "DefaultConnectionSettings" -Value $bin -Type Binary
+                Refresh-Settings
             }
             "lock" {
                 Get-Process "Classroom" -ErrorAction SilentlyContinue | Stop-Process -Force
-                if (Test-Path $folder) {
-                    takeown /f "$folder" /a /r /d y | Out-Null
-                    icacls "$folder" /inheritance:r /deny Everyone:F /t | Out-Null
-                }
+                takeown /f "$folder" /a /r /d y | Out-Null
+                icacls "$folder" /inheritance:r /deny Everyone:F /t | Out-Null
             }
             "unlock" {
-                if (Test-Path $folder) {
-                    icacls "$folder" /remove:deny Everyone /t | Out-Null
-                    icacls "$folder" /grant "Everyone:(OI)(CI)F" /t | Out-Null
-                    Start-Sleep -Seconds 1
-                    if (Test-Path "$folder\Classroom.exe") { Start-Process "$folder\Classroom.exe" -WorkingDirectory $folder }
-                }
+                icacls "$folder" /remove:deny Everyone /t | Out-Null
+                icacls "$folder" /grant Everyone:F /t | Out-Null
+                if (Test-Path "$folder\Classroom.exe") { Start-Process "$folder\Classroom.exe" -WorkingDirectory $folder }
             }
         }
     }
