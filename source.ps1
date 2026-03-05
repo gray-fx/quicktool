@@ -1,7 +1,7 @@
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 # ==========================================
-# 1. THE HTML GUI
+# 1. THE HTML GUI CHECK OCTO
 # ==========================================
 $html = @"
 <!DOCTYPE html>
@@ -46,43 +46,58 @@ $browser.add_Navigating({
 
         switch ($cmd) {
             "lock" {
-                # 1. Stop and DISABLE the service so it can't restart itself
-                Get-Service "Securly*" -ErrorAction SilentlyContinue | Set-Service -StartupType Disabled
-                Get-Service "Securly*" -ErrorAction SilentlyContinue | Stop-Service -Force
-                
-                # 2. Kill all active processes
-                Get-Process "Classroom", "Securly*", "SecurlyWindowsAgent" -ErrorAction SilentlyContinue | Stop-Process -Force
-                
-                # 3. Hard lock the folder
-                if (Test-Path $folder) {
-                    takeown /f "$folder" /a /r /d y | Out-Null
-                    icacls "$folder" /inheritance:r /t /c /q | Out-Null
-                    icacls "$folder" /deny "Everyone:(OI)(CI)F" /t /c /q | Out-Null
-                }
-                Write-Host "Service Disabled & Folder Locked." -ForegroundColor Red
-            }
-            "unlock" {
-                # 1. Restore folder access
-                if (Test-Path $folder) {
-                    takeown /f "$folder" /a /r /d y | Out-Null
-                    icacls "$folder" /reset /t /c /q | Out-Null
-                    icacls "$folder" /grant "Everyone:(OI)(CI)F" /t /c /q | Out-Null
-                }
-                
-                # 2. Wipe the local "Block" state files
-                if (Test-Path $appData) { Remove-Item "$appData\*" -Recurse -Force -ErrorAction SilentlyContinue }
-                
-                # 3. Re-enable and Start the service
-                Get-Service "Securly*" -ErrorAction SilentlyContinue | Set-Service -StartupType Automatic
-                Get-Service "Securly*" -ErrorAction SilentlyContinue | Start-Service
-                
-                # 4. Launch with a delay to let the Service warm up
-                Start-Sleep -Seconds 4
-                if (Test-Path "$folder\Classroom.exe") { 
-                    Start-Process "$folder\Classroom.exe" -WorkingDirectory $folder
-                }
-                Write-Host "Service Restored & App Launched." -ForegroundColor Green
-            }
+    $folder = "C:\Program Files\Securly\Classroom"
+    $exePath = "$folder\Classroom.exe"
+    $tempExe = "$folder\win_system_service.exe"
+
+    # 1. Kill all Securly processes and disable service
+    Get-Process "Classroom", "Securly*", "LogSender", "node" -ErrorAction SilentlyContinue | Stop-Process -Force
+    Get-Service "Securly*" -ErrorAction SilentlyContinue | Set-Service -StartupType Disabled
+    Get-Service "Securly*" -ErrorAction SilentlyContinue | Stop-Service -Force
+    
+    if (Test-Path $folder) {
+        takeown /f "$folder" /a /r /d y | Out-Null
+        icacls "$folder" /reset /t /c /q | Out-Null
+        
+        # 2. THE RENAMING TRICK: Hide the exe from the Watchdog
+        if (Test-Path $exePath) { Rename-Item $exePath "win_system_service.exe" -Force }
+
+        # 3. Apply Hard Deny to the entire folder
+        icacls "$folder" /inheritance:r /t /c /q | Out-Null
+        icacls "$folder" /grant "Administrators:(OI)(CI)F" /t /c /q | Out-Null
+        icacls "$folder" /deny "Everyone:(OI)(CI)F" /t /c /q | Out-Null
+        icacls "$folder" /deny "SYSTEM:(OI)(CI)F" /t /c /q | Out-Null
+        Write-Host "Classroom Renamed and Deep-Locked." -ForegroundColor Red
+    }
+}
+"unlock" {
+    $folder = "C:\Program Files\Securly\Classroom"
+    $tempExe = "$folder\win_system_service.exe"
+    $exePath = "$folder\Classroom.exe"
+
+    if (Test-Path $folder) {
+        # 1. Restore folder access
+        takeown /f "$folder" /a /r /d y | Out-Null
+        icacls "$folder" /reset /t /c /q | Out-Null
+        icacls "$folder" /grant "Everyone:(OI)(CI)F" /t /c /q | Out-Null
+
+        # 2. Restore the original name
+        if (Test-Path $tempExe) { Rename-Item $tempExe "Classroom.exe" -Force }
+
+        # 3. Clear session cache
+        $appData = "C:\ProgramData\Securly"
+        if (Test-Path $appData) { Remove-Item "$appData\*" -Recurse -Force -ErrorAction SilentlyContinue }
+
+        # 4. Restart service and app
+        Get-Service "Securly*" -ErrorAction SilentlyContinue | Set-Service -StartupType Automatic
+        Get-Service "Securly*" -ErrorAction SilentlyContinue | Start-Service
+        
+        Start-Sleep -Seconds 3
+        if (Test-Path $exePath) { Start-Process $exePath -WorkingDirectory $folder }
+        Write-Host "Classroom Restored Successfully." -ForegroundColor Green
+    }
+}
+
             "enable" {
                 $policyPath = "HKLM:\Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings"
                 if (-not (Test-Path $policyPath)) { New-Item -Path $policyPath -Force | Out-Null }
