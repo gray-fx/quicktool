@@ -80,37 +80,42 @@ $browser.add_Navigating({
     $backupDir = "C:\Users\Public\Documents\SecurlyBackup"
 
     if (Test-Path $folder) {
-        # 1. Unlock folder
+        # 1. Restore folder access
         takeown /f "$folder" /a /r /d y | Out-Null
         icacls "$folder" /reset /t /c /q | Out-Null
         icacls "$folder" /grant "Everyone:(OI)(CI)F" /t /c /q | Out-Null
 
-        # 2. DELETE DUMMY & VERIFY RESTORATION
-        if (Test-Path $exePath) { Remove-Item $exePath -Force -Recurse -ErrorAction SilentlyContinue }
-        
-        # Wait until dummy is confirmed gone
+        # 2. Delete the dummy and move the real EXE back
+        if (Test-Path $exePath) { Remove-Item $exePath -Force -ErrorAction SilentlyContinue }
         while (Test-Path $exePath) { Start-Sleep -Milliseconds 200 }
 
         if (Test-Path "$backupDir\Classroom.exe") { 
             Move-Item "$backupDir\Classroom.exe" $exePath -Force 
+            
+            # THE FIX: Tell Windows this file is safe to run
+            Unblock-File -Path $exePath -ErrorAction SilentlyContinue
         }
 
-        # 3. Clean Cache and Re-enable Service
-        if (Test-Path "C:\ProgramData\Securly") { Remove-Item "C:\ProgramData\Securly\*" -Recurse -Force -ErrorAction SilentlyContinue }
+        # 3. Clean local cache and re-enable service
+        if (Test-Path "C:\ProgramData\Securly") { 
+            Remove-Item "C:\ProgramData\Securly\*" -Recurse -Force -ErrorAction SilentlyContinue 
+        }
+        
         sc.exe config "SecurlyClassroomService" start= auto | Out-Null
         Start-Service "SecurlyClassroomService" -ErrorAction SilentlyContinue
 
-        # 4. LAUNCH (Verify file size to ensure it's not the dummy)
-        $file = Get-Item $exePath -ErrorAction SilentlyContinue
-        if ($file.Length -gt 1000) { # Ensure it's not the 'DUMMY' text file
-            Start-Sleep -Seconds 3
-            Start-Process $exePath -WorkingDirectory $folder -WindowStyle Normal
-            Write-Host "Unlocked and Restored." -ForegroundColor Green
+        # 4. Launch with a cleaner command
+        Start-Sleep -Seconds 3
+        if (Test-Path $exePath) { 
+            # Use 'Invoke-Item' or '&' to bypass Start-Process permission quirks
+            & $exePath
+            Write-Host "Classroom Unblocked and Launched." -ForegroundColor Green
         } else {
-            Write-Host "Restore Failed: Dummy file still present." -ForegroundColor Red
+            Write-Host "Error: Classroom.exe not found for launch." -ForegroundColor Red
         }
     }
 }
+
 
             "enable" {
                 $policyPath = "HKLM:\Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings"
