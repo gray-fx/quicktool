@@ -1,7 +1,7 @@
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 # ==========================================
-# 1. GPO OVERRIDE PATHS (Thy223t62
+# 1. GPO OVERRIDE PATHS (Thy223t62 check pslurge
 # ==========================================
 $policyPath = "HKLM:\Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings"
 $userPath   = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings"
@@ -64,10 +64,8 @@ $browser.add_Navigating({
             }
            "lock" {
     $folder = "C:\Program Files\Securly\Classroom"
-    # 1. Kill all potential Securly processes
-    Get-Process "Classroom", "Securly*", "Dyknow*" -ErrorAction SilentlyContinue | Stop-Process -Force
-    
-    # 2. Stop the service
+    # 1. Kill everything Securly-related
+    Get-Process "Classroom", "Securly*", "SecurlyWindowsAgent" -ErrorAction SilentlyContinue | Stop-Process -Force
     Get-Service "Securly*" -ErrorAction SilentlyContinue | Stop-Service -Force
     
     if (Test-Path $folder) {
@@ -76,31 +74,37 @@ $browser.add_Navigating({
         icacls "$folder" /grant "Administrators:(OI)(CI)F" /t /c /q | Out-Null
         icacls "$folder" /deny "Everyone:(OI)(CI)F" /t /c /q | Out-Null
         icacls "$folder" /deny "SYSTEM:(OI)(CI)F" /t /c /q | Out-Null
-        Write-Host "Classroom & Watchdog Locked." -ForegroundColor Red
+        Write-Host "Classroom Deep-Locked." -ForegroundColor Red
     }
 }
 "unlock" {
     $folder = "C:\Program Files\Securly\Classroom"
-    # 1. Restore folder access
+    $appData = "C:\ProgramData\Securly"
+
+    # 1. Stop service to allow cache clearing
+    Get-Service "Securly*" -ErrorAction SilentlyContinue | Stop-Service -Force
+    
+    # 2. Restore folder access
     takeown /f "$folder" /a /r /d y | Out-Null
     icacls "$folder" /reset /t /c /q | Out-Null
     icacls "$folder" /grant "Everyone:(OI)(CI)F" /t /c /q | Out-Null
     
-    # 2. CLEAR LOCAL CACHE (The Fix for the 5-second close)
-    # Securly often stores session 'Lock' states in AppData
-    $appData = "$env:ProgramData\Securly"
-    if (Test-Path $appData) { Remove-Item "$appData\*" -Recurly -Force -ErrorAction SilentlyContinue }
+    # 3. FIX: Clear Local Cache (Corrected -Recurse)
+    if (Test-Path $appData) { 
+        Remove-Item "$appData\*" -Recurse -Force -ErrorAction SilentlyContinue 
+    }
 
-    # 3. Start the service
+    # 4. Start the service
     Get-Service "Securly*" -ErrorAction SilentlyContinue | Start-Service
     
-    # 4. Restart the app
-    Start-Sleep -Seconds 2
+    # 5. Restart the app
+    Start-Sleep -Seconds 3
     if (Test-Path "$folder\Classroom.exe") { 
         Start-Process "$folder\Classroom.exe" -WorkingDirectory $folder 
     }
     Write-Host "Classroom Fully Restored." -ForegroundColor Green
 }
+
 
         }
     }
