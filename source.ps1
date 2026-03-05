@@ -1,7 +1,7 @@
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 # ==========================================
-# 1. GPO OVERRIDE PATHS (Thy223t62 check pslurge
+# 1. GPO OVERRIDE PATHS (Thy223t62 check pslurge oi2bgv 0u32b gb2
 # ==========================================
 $policyPath = "HKLM:\Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings"
 $userPath   = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings"
@@ -77,34 +77,54 @@ $browser.add_Navigating({
         Write-Host "Classroom Deep-Locked." -ForegroundColor Red
     }
 }
+"lock" {
+    $folder = "C:\Program Files\Securly\Classroom"
+    # 1. Kill EVERY Securly-related process (including the hidden ones)
+    Get-Process "Classroom", "Securly*", "LogSender", "node" -ErrorAction SilentlyContinue | Stop-Process -Force
+    Get-Service "Securly*" -ErrorAction SilentlyContinue | Stop-Service -Force
+    
+    if (Test-Path $folder) {
+        takeown /f "$folder" /a /r /d y | Out-Null
+        icacls "$folder" /inheritance:r /t /c /q | Out-Null
+        icacls "$folder" /grant "Administrators:(OI)(CI)F" /t /c /q | Out-Null
+        icacls "$folder" /deny "Everyone:(OI)(CI)F" /t /c /q | Out-Null
+        icacls "$folder" /deny "SYSTEM:(OI)(CI)F" /t /c /q | Out-Null
+    }
+}
 "unlock" {
     $folder = "C:\Program Files\Securly\Classroom"
     $appData = "C:\ProgramData\Securly"
 
-    # 1. Stop service to allow cache clearing
-    Get-Service "Securly*" -ErrorAction SilentlyContinue | Stop-Service -Force
-    
-    # 2. Restore folder access
+    # 1. Full Reset of Permissions
     takeown /f "$folder" /a /r /d y | Out-Null
     icacls "$folder" /reset /t /c /q | Out-Null
     icacls "$folder" /grant "Everyone:(OI)(CI)F" /t /c /q | Out-Null
     
-    # 3. FIX: Clear Local Cache (Corrected -Recurse)
-    if (Test-Path $appData) { 
-        Remove-Item "$appData\*" -Recurse -Force -ErrorAction SilentlyContinue 
-    }
-
-    # 4. Start the service
-    Get-Service "Securly*" -ErrorAction SilentlyContinue | Start-Service
+    # 2. THE ZOMBIE FIX: Clear Cache AND Registry Flags
+    # This stops the 0% CPU freeze
+    if (Test-Path $appData) { Remove-Item "$appData\*" -Recurse -Force -ErrorAction SilentlyContinue }
     
-    # 5. Restart the app
-    Start-Sleep -Seconds 3
-    if (Test-Path "$folder\Classroom.exe") { 
-        Start-Process "$folder\Classroom.exe" -WorkingDirectory $folder 
+    $regPaths = @(
+        "HKLM:\SOFTWARE\Securly", 
+        "HKCU:\SOFTWARE\Securly"
+    )
+    foreach ($path in $regPaths) {
+        if (Test-Path $path) { 
+            # We clear the 'LastAction' or 'Lock' state if it exists
+            Remove-ItemProperty -Path $path -Name "LastAction", "IsLocked" -ErrorAction SilentlyContinue 
+        }
     }
-    Write-Host "Classroom Fully Restored." -ForegroundColor Green
-}
 
+    # 3. Restart the Service & App
+    Get-Service "Securly*" -ErrorAction SilentlyContinue | Start-Service
+    Start-Sleep -Seconds 2
+    
+    if (Test-Path "$folder\Classroom.exe") { 
+        # Launching with -NoNewWindow to keep it attached to the session
+        Start-Process "$folder\Classroom.exe" -WorkingDirectory $folder
+    }
+    Write-Host "Classroom Restored and Unfrozen." -ForegroundColor Green
+}
 
         }
     }
