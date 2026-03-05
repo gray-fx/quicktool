@@ -1,7 +1,7 @@
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 # ==========================================
-# 1. GPO OVERRIDE PATHS (The Fix)
+# 1. GPO OVERRIDE PATHS (The Fix) g2h830gb0v
 # ==========================================
 $policyPath = "HKLM:\Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings"
 $userPath   = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings"
@@ -62,7 +62,7 @@ $browser.add_Navigating({
                 Remove-ItemProperty -Path $userPath -Name "AutoConfigURL" -ErrorAction SilentlyContinue
                 Write-Host "Filter Disabled." -ForegroundColor Yellow
             }
-            "lock" {
+           "lock" {
                 $folder = "C:\Program Files\Securly\Classroom"
                 # 1. Kill the process
                 Get-Process "Classroom" -ErrorAction SilentlyContinue | Stop-Process -Force
