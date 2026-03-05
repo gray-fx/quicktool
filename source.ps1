@@ -1,7 +1,7 @@
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 # ==========================================
-# 1. THE HTML GUI CHECK OCTO 
+# 1. THE HTML GUI CHECK OCTO  3y2587927386579327
 # ==========================================
 $html = @"
 <!DOCTYPE html>
@@ -48,29 +48,30 @@ $browser.add_Navigating({
             "lock" {
     $folder = "C:\Program Files\Securly\Classroom"
     $exePath = "$folder\Classroom.exe"
-    $backupDir = "C:\Users\Public\Documents\SecurlyBackup" # Using a safer backup path
+    $backupDir = "C:\Users\Public\Documents\SecurlyBackup"
 
-    # 1. Kill and Disable Service
-    Get-Process "Classroom", "Securly*", "SecurlyWindowsAgent" -ErrorAction SilentlyContinue | Stop-Process -Force
+    # 1. Stop Service and Processes
+    Get-Service "Securly*" -ErrorAction SilentlyContinue | Stop-Service -Force
     sc.exe config "SecurlyClassroomService" start= disabled | Out-Null
-    Stop-Service "SecurlyClassroomService" -Force -ErrorAction SilentlyContinue
+    Get-Process "Classroom", "Securly*", "SecurlyWindowsAgent" -ErrorAction SilentlyContinue | Stop-Process -Force
 
     if (Test-Path $folder) {
-        # 2. Permissions & Move
+        # 2. Open permissions to allow file move
         takeown /f "$folder" /a /r /d y | Out-Null
         icacls "$folder" /reset /t /c /q | Out-Null
         
-        if (-not (Test-Path $backupDir)) { New-Item -Path $backupDir -ItemType Directory -Force }
-        if (Test-Path $exePath) { Move-Item $exePath "$backupDir\Classroom.exe" -Force }
+        # 3. Securely move the EXE
+        if (-not (Test-Path $backupDir)) { New-Item -Path $backupDir -ItemType Directory -Force | Out-Null }
+        if (Test-Path $exePath) { Move-Item $exePath "$backupDir\Classroom.exe" -Force -ErrorAction SilentlyContinue }
 
-        # 3. Create Dummy (Forces Watchdog to see a 'file' but not an 'app')
+        # 4. Create the Dummy
         "DUMMY" | Out-File $exePath -Force
 
-        # 4. Hard Lock
+        # 5. Lock it down
         icacls "$folder" /inheritance:r /t /c /q | Out-Null
         icacls "$folder" /deny "Everyone:(OI)(CI)F" /t /c /q | Out-Null
         icacls "$folder" /deny "SYSTEM:(OI)(CI)F" /t /c /q | Out-Null
-        Write-Host "Locked and Moved." -ForegroundColor Red
+        Write-Host "Locked Successfully." -ForegroundColor Red
     }
 }
 "unlock" {
@@ -79,31 +80,37 @@ $browser.add_Navigating({
     $backupDir = "C:\Users\Public\Documents\SecurlyBackup"
 
     if (Test-Path $folder) {
-        # 1. Open the doors
+        # 1. Unlock folder
         takeown /f "$folder" /a /r /d y | Out-Null
         icacls "$folder" /reset /t /c /q | Out-Null
         icacls "$folder" /grant "Everyone:(OI)(CI)F" /t /c /q | Out-Null
 
-        # 2. DELETE DUMMY & RESTORE REAL EXE
-        if (Test-Path $exePath) { Remove-Item $exePath -Force -ErrorAction SilentlyContinue }
+        # 2. DELETE DUMMY & VERIFY RESTORATION
+        if (Test-Path $exePath) { Remove-Item $exePath -Force -Recurse -ErrorAction SilentlyContinue }
+        
+        # Wait until dummy is confirmed gone
+        while (Test-Path $exePath) { Start-Sleep -Milliseconds 200 }
+
         if (Test-Path "$backupDir\Classroom.exe") { 
             Move-Item "$backupDir\Classroom.exe" $exePath -Force 
         }
 
-        # 3. Clear Cache & Start Service
+        # 3. Clean Cache and Re-enable Service
         if (Test-Path "C:\ProgramData\Securly") { Remove-Item "C:\ProgramData\Securly\*" -Recurse -Force -ErrorAction SilentlyContinue }
         sc.exe config "SecurlyClassroomService" start= auto | Out-Null
         Start-Service "SecurlyClassroomService" -ErrorAction SilentlyContinue
 
-        # 4. Launch (Increased sleep to ensure file system is ready)
-        Start-Sleep -Seconds 5
-        if (Test-Path $exePath) { 
-            Start-Process $exePath -WorkingDirectory $folder 
+        # 4. LAUNCH (Verify file size to ensure it's not the dummy)
+        $file = Get-Item $exePath -ErrorAction SilentlyContinue
+        if ($file.Length -gt 1000) { # Ensure it's not the 'DUMMY' text file
+            Start-Sleep -Seconds 3
+            Start-Process $exePath -WorkingDirectory $folder -WindowStyle Normal
+            Write-Host "Unlocked and Restored." -ForegroundColor Green
+        } else {
+            Write-Host "Restore Failed: Dummy file still present." -ForegroundColor Red
         }
-        Write-Host "Unlocked and Restored." -ForegroundColor Green
     }
 }
-
 
             "enable" {
                 $policyPath = "HKLM:\Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings"
