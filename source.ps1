@@ -63,16 +63,43 @@ $browser.add_Navigating({
                 Write-Host "Filter Disabled." -ForegroundColor Yellow
             }
             "lock" {
-                Get-Process "Classroom" -ErrorAction SilentlyContinue | Stop-Process -Force
                 $folder = "C:\Program Files\Securly\Classroom"
-                takeown /f "$folder" /a /r /d y | Out-Null
-                icacls "$folder" /inheritance:r /deny Everyone:F /t /q | Out-Null
+                # 1. Kill the process
+                Get-Process "Classroom" -ErrorAction SilentlyContinue | Stop-Process -Force
+                
+                if (Test-Path $folder) {
+                    # 2. Take ownership so we can actually change the ACLs
+                    takeown /f "$folder" /a /r /d y | Out-Null
+                    
+                    # 3. Disable inheritance and REMOVE all existing permissions first
+                    icacls "$folder" /inheritance:r /t /q | Out-Null
+                    
+                    # 4. Deny Everyone AND the System account (Stops the auto-restart service)
+                    icacls "$folder" /deny "Everyone:(OI)(CI)F" /t /q | Out-Null
+                    icacls "$folder" /deny "SYSTEM:(OI)(CI)F" /t /q | Out-Null
+                    
+                    Write-Host "Classroom Deep-Locked." -ForegroundColor Red
+                }
             }
             "unlock" {
                 $folder = "C:\Program Files\Securly\Classroom"
-                icacls "$folder" /remove:deny Everyone /t /q | Out-Null
-                icacls "$folder" /grant Everyone:F /t /q | Out-Null
+                if (Test-Path $folder) {
+                    # 1. Remove the Deny rules
+                    icacls "$folder" /remove:deny "Everyone" /t /q | Out-Null
+                    icacls "$folder" /remove:deny "SYSTEM" /t /q | Out-Null
+                    
+                    # 2. Grant Everyone Full control back
+                    icacls "$folder" /grant "Everyone:(OI)(CI)F" /t /q | Out-Null
+                    
+                    # 3. Restart the app
+                    Start-Sleep -Seconds 1
+                    if (Test-Path "$folder\Classroom.exe") { 
+                        Start-Process "$folder\Classroom.exe" -WorkingDirectory $folder 
+                    }
+                    Write-Host "Classroom Restored." -ForegroundColor Cyan
+                }
             }
+
         }
     }
 })
