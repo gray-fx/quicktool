@@ -63,42 +63,48 @@ $browser.add_Navigating({
                 Write-Host "Filter Disabled." -ForegroundColor Yellow
             }
            "lock" {
-                $folder = "C:\Program Files\Securly\Classroom"
-                # 1. Kill the process
-                Get-Process "Classroom" -ErrorAction SilentlyContinue | Stop-Process -Force
-                
-                if (Test-Path $folder) {
-                    # 2. Take ownership so we can actually change the ACLs
-                    takeown /f "$folder" /a /r /d y | Out-Null
-                    
-                    # 3. Disable inheritance and REMOVE all existing permissions first
-                    icacls "$folder" /inheritance:r /t /q | Out-Null
-                    
-                    # 4. Deny Everyone AND the System account (Stops the auto-restart service)
-                    icacls "$folder" /deny "Everyone:(OI)(CI)F" /t /q | Out-Null
-                    icacls "$folder" /deny "SYSTEM:(OI)(CI)F" /t /q | Out-Null
-                    
-                    Write-Host "Classroom Deep-Locked." -ForegroundColor Red
-                }
-            }
-            "unlock" {
-                $folder = "C:\Program Files\Securly\Classroom"
-                if (Test-Path $folder) {
-                    # 1. Remove the Deny rules
-                    icacls "$folder" /remove:deny "Everyone" /t /q | Out-Null
-                    icacls "$folder" /remove:deny "SYSTEM" /t /q | Out-Null
-                    
-                    # 2. Grant Everyone Full control back
-                    icacls "$folder" /grant "Everyone:(OI)(CI)F" /t /q | Out-Null
-                    
-                    # 3. Restart the app
-                    Start-Sleep -Seconds 1
-                    if (Test-Path "$folder\Classroom.exe") { 
-                        Start-Process "$folder\Classroom.exe" -WorkingDirectory $folder 
-                    }
-                    Write-Host "Classroom Restored." -ForegroundColor Cyan
-                }
-            }
+    $folder = "C:\Program Files\Securly\Classroom"
+    # 1. Kill the process
+    Get-Process "Classroom" -ErrorAction SilentlyContinue | Stop-Process -Force
+    
+    if (Test-Path $folder) {
+        # 2. Take ownership as Administrators (The Master Key)
+        takeown /f "$folder" /a /r /d y | Out-Null
+        
+        # 3. Strip all inherited permissions
+        icacls "$folder" /inheritance:r /t /c /q | Out-Null
+        
+        # 4. Apply the Hard Deny (OI=Object Inherit, CI=Container Inherit)
+        # We MUST grant Administrators full control first so the script can still see the folder
+        icacls "$folder" /grant "Administrators:(OI)(CI)F" /t /c /q | Out-Null
+        icacls "$folder" /deny "Everyone:(OI)(CI)F" /t /c /q | Out-Null
+        icacls "$folder" /deny "SYSTEM:(OI)(CI)F" /t /c /q | Out-Null
+        
+        Write-Host "Classroom Deep-Locked." -ForegroundColor Red
+    }
+}
+"unlock" {
+    $folder = "C:\Program Files\Securly\Classroom"
+    if (Test-Path $folder) {
+        # 1. Take ownership back again just in case
+        takeown /f "$folder" /a /r /d y | Out-Null
+        
+        # 2. THE FIX: Reset the ACL to default (Strips the Deny rules completely)
+        icacls "$folder" /reset /t /c /q | Out-Null
+        
+        # 3. Grant Everyone access back
+        icacls "$folder" /grant "Everyone:(OI)(CI)F" /t /c /q | Out-Null
+        
+        # 4. Restart the app
+        Start-Sleep -Seconds 2
+        if (Test-Path "$folder\Classroom.exe") { 
+            # Use -WindowStyle Normal to ensure it pops up
+            Start-Process "$folder\Classroom.exe" -WorkingDirectory $folder -WindowStyle Normal
+        }
+        Write-Host "Classroom Restored." -ForegroundColor Cyan
+    }
+}
+
 
         }
     }
