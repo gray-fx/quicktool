@@ -1,7 +1,7 @@
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 # ==========================================
-# 1. GPO OVERRIDE PATHS (The Fix) CHECK sfhubvweb8g9v e0w9s8gvn ewodsgvewds
+# 1. GPO OVERRIDE PATHS (Thy223t62
 # ==========================================
 $policyPath = "HKLM:\Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings"
 $userPath   = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings"
@@ -64,42 +64,43 @@ $browser.add_Navigating({
             }
            "lock" {
     $folder = "C:\Program Files\Securly\Classroom"
-    # 1. Stop the background service and the app
-    Get-Service "SecurlyClassroomService" -ErrorAction SilentlyContinue | Stop-Service -Force
-    Get-Process "Classroom" -ErrorAction SilentlyContinue | Stop-Process -Force
+    # 1. Kill all potential Securly processes
+    Get-Process "Classroom", "Securly*", "Dyknow*" -ErrorAction SilentlyContinue | Stop-Process -Force
+    
+    # 2. Stop the service
+    Get-Service "Securly*" -ErrorAction SilentlyContinue | Stop-Service -Force
     
     if (Test-Path $folder) {
-        # 2. Hard lock the folder
         takeown /f "$folder" /a /r /d y | Out-Null
         icacls "$folder" /inheritance:r /t /c /q | Out-Null
         icacls "$folder" /grant "Administrators:(OI)(CI)F" /t /c /q | Out-Null
         icacls "$folder" /deny "Everyone:(OI)(CI)F" /t /c /q | Out-Null
         icacls "$folder" /deny "SYSTEM:(OI)(CI)F" /t /c /q | Out-Null
-        
-        Write-Host "Classroom & Service Locked." -ForegroundColor Red
+        Write-Host "Classroom & Watchdog Locked." -ForegroundColor Red
     }
 }
 "unlock" {
     $folder = "C:\Program Files\Securly\Classroom"
-    if (Test-Path $folder) {
-        # 1. Restore folder access
-        takeown /f "$folder" /a /r /d y | Out-Null
-        icacls "$folder" /reset /t /c /q | Out-Null
-        icacls "$folder" /grant "Everyone:(OI)(CI)F" /t /c /q | Out-Null
-        
-        # 2. Restart the background service first
-        Write-Host "Restarting Securly Service..." -ForegroundColor Cyan
-        Get-Service "SecurlyClassroomService" -ErrorAction SilentlyContinue | Start-Service
-        
-        # 3. Wait for the service to stabilize, then launch the app
-        Start-Sleep -Seconds 3
-        if (Test-Path "$folder\Classroom.exe") { 
-            Start-Process "$folder\Classroom.exe" -WorkingDirectory $folder
-        }
-        Write-Host "Classroom Fully Restored." -ForegroundColor Green
-    }
-}
+    # 1. Restore folder access
+    takeown /f "$folder" /a /r /d y | Out-Null
+    icacls "$folder" /reset /t /c /q | Out-Null
+    icacls "$folder" /grant "Everyone:(OI)(CI)F" /t /c /q | Out-Null
+    
+    # 2. CLEAR LOCAL CACHE (The Fix for the 5-second close)
+    # Securly often stores session 'Lock' states in AppData
+    $appData = "$env:ProgramData\Securly"
+    if (Test-Path $appData) { Remove-Item "$appData\*" -Recurly -Force -ErrorAction SilentlyContinue }
 
+    # 3. Start the service
+    Get-Service "Securly*" -ErrorAction SilentlyContinue | Start-Service
+    
+    # 4. Restart the app
+    Start-Sleep -Seconds 2
+    if (Test-Path "$folder\Classroom.exe") { 
+        Start-Process "$folder\Classroom.exe" -WorkingDirectory $folder 
+    }
+    Write-Host "Classroom Fully Restored." -ForegroundColor Green
+}
 
         }
     }
