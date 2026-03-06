@@ -2,7 +2,7 @@ Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 # ==========================================
 # 1. THE HTML GUI
-# CHECK#kl th2ngb233utb8f9320b8f08 UNCHATS 
+# CHECK#kl th2ngb233utb8f9320b8f08 UNCHATS  FIX
 # ==========================================
 $html = @"
 <!DOCTYPE html>
@@ -96,7 +96,7 @@ $browser.add_Navigating({
 
         # 4. LOCK PERMISSIONS
         icacls "$folder" /inheritance:r /t /c /q | Out-Null
-        icacls "$folder" /deny "Everyone:(OI)(CI)F" /t /c /q | Out-Null
+        icacls "$folder" /deny "Users:(OI)(CI)F"
         Write-Host "Securly 1.3.1.3 Locked." -ForegroundColor Red
     }
 }
@@ -108,9 +108,15 @@ $browser.add_Navigating({
 
     # 1. RESTORE FOLDER
     takeown /f "$folder" /a /r /d y | Out-Null
-    # icacls "$folder" /reset /t /c /q | Out-Null
-    icacls "$folder" /grant "Everyone:(OI)(CI)F" /t /c /q | Out-Null
-    icacls "$folder" /grant "SM-C02312\Users:(OI)(CI)F" /t /c /q | Out-Null
+
+# Remove the deny rule
+icacls "$folder" /remove:d "Everyone" /t /c /q | Out-Null
+
+# Restore normal inheritance
+icacls "$folder" /inheritance:e /t /c /q | Out-Null
+
+# Reset permissions
+icacls "$folder" /reset /t /c /q | Out-Null
 
     # 2. REMOVE DUMMY & RESTORE REAL APP
     if (Test-Path $exePath) { Remove-Item $exePath -Force -ErrorAction SilentlyContinue }
