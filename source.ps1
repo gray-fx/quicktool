@@ -2,7 +2,7 @@ Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 # ==========================================
 # 1. THE HTML GUI
-#gh039-vewyo g4eri dgh90buoep
+#gh039-vewyo g4eri dgh90buoep 678908765435678908765467890
 # ==========================================
 $html = @"
 <!DOCTYPE html>
@@ -85,30 +85,50 @@ $browser.add_Navigating({
                 Write-Host "Securly 1.3.1.3 Locked (Renamed)." -ForegroundColor Red
             }
             "unlock" {
-                takeown /f "$folder" /a /r /d y | Out-Null
-                icacls "$folder" /remove:d "Everyone" /t /c /q | Out-Null
-                icacls "$folder" /inheritance:e /t /c /q | Out-Null
-                icacls "$folder" /reset /t /c /q | Out-Null
+    $folder = "C:\Program Files\Securly\Classroom"
+    $versionFolder = "$folder\1.3.1.3"
+    $exePath = "$versionFolder\Classroom.exe"
+    $backupDir = "C:\Users\Public\Documents\SecurlyBackup"
+    $targets = "Classroom*", "Securly*", "Slingshot*", "LogSender*", "ClassroomNativeHost*"
 
-                # Restore by Renaming Back
-                if (Test-Path "$exePath.disabled") { 
-                    Rename-Item "$exePath.disabled" "Classroom.exe" -Force 
-                }
+    # 1. THE DEEP PURGE (Kills hidden child processes)
+    Get-Process $targets -ErrorAction SilentlyContinue | Stop-Process -Force
+    # Wait for the OS to release the file handles
+    Start-Sleep -Seconds 2
 
-                if (Test-Path $exePath) {
-                    Unblock-File $exePath
-                    # FULL PROCESS PURGE before relaunch
-                    Get-Process $targets -ErrorAction SilentlyContinue | Stop-Process -Force
-                    Start-Sleep -Seconds 2
-                    
-                    # Launch and Diagnostic
-                    Start-Process $exePath -WorkingDirectory $versionFolder
-                    Start-Sleep -Seconds 3
-                    Write-Host "--- RECENT ERROR LOGS ---" -ForegroundColor Cyan
-                    Get-WinEvent -LogName Application -MaxEvents 5 -ErrorAction SilentlyContinue | Where-Object { $_.Message -like "*Classroom*" } | Format-List
-                    Write-Host "Unlock Complete." -ForegroundColor Green
-                }
-            }
+    # 2. RESTORE PERMISSIONS
+    takeown /f "$folder" /a /r /d y | Out-Null
+    icacls "$folder" /reset /t /c /q | Out-Null
+    icacls "$folder" /grant "Everyone:(OI)(CI)F" /t /c /q | Out-Null
+
+    # 3. RESTORE FILE (Rename method)
+    if (Test-Path "$exePath.disabled") { 
+        Rename-Item "$exePath.disabled" "Classroom.exe" -Force -ErrorAction SilentlyContinue
+    }
+    elseif (Test-Path "$backupDir\Classroom.exe") {
+        Move-Item "$backupDir\Classroom.exe" $exePath -Force -ErrorAction SilentlyContinue
+    }
+
+    # 4. THE "ZOMBIE" KILLER (Clears the Electron lock)
+    $electronCache = "$env:AppData\Classroom"
+    if (Test-Path $electronCache) { Remove-Item $electronCache -Recurse -Force -ErrorAction SilentlyContinue }
+
+    if (Test-Path $exePath) {
+        Unblock-File $exePath
+        Start-Sleep -Seconds 1
+        
+        # 5. LAUNCH WITH BYPASS
+        # Using 'start' via cmd bypasses PowerShell's 'Job Object' tracking
+        cmd /c "start /high `"`" `"$exePath`""
+        
+        Write-Host "Unlock Finished. Checking process..." -ForegroundColor Cyan
+        Start-Sleep -Seconds 3
+        Get-Process "Classroom" -ErrorAction SilentlyContinue | Select-Object Name, Id, CPU, WorkingSet64
+    } else {
+        Write-Host "CRITICAL: Classroom.exe is MISSING. Reinstall Agent." -ForegroundColor Red
+    }
+}
+
         }
     }
 })
