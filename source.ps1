@@ -1,7 +1,7 @@
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 # ==========================================
-# 1. THE HTML GUI sneaker
+# 1. THE HTML GUI  qpwihgboq3buewgpqvepwbin
 # ==========================================
 $html = @"
 <!DOCTYPE html>
@@ -84,25 +84,43 @@ $browser.add_Navigating({
                 Write-Host "Locked and Moved." -ForegroundColor Red
             }
             "unlock" {
-                takeown /f "$folder" /a /r /d y | Out-Null
-                icacls "$folder" /reset /t /c /q | Out-Null
-                icacls "$folder" /grant "Everyone:(OI)(CI)F" /t /c /q | Out-Null
-                Get-ChildItem $folder -Filter "*.exe" | Where-Object { $_.Length -lt 5000 } | Remove-Item -Force
-                $searchPaths = @("$backupDir\Classroom.exe", "C:\Windows\Temp\Classroom_backup.exe", "$folder\win_system_service.exe")
-                $found = $false
-                foreach ($path in $searchPaths) {
-                    if (Test-Path $path) { Move-Item $path "$folder\Classroom.exe" -Force; $found = $true; break }
-                }
-                if ($found) {
-                    Unblock-File "$folder\Classroom.exe"
-                    if (Test-Path "C:\ProgramData\Securly") { Remove-Item "C:\ProgramData\Securly\*" -Recurse -Force -ErrorAction SilentlyContinue }
-                    sc.exe config "SecurlyClassroomService" start= auto | Out-Null
-                    Start-Service "SecurlyClassroomService" -ErrorAction SilentlyContinue
-                    Start-Sleep -Seconds 4
-                    & "$folder\Classroom.exe"
-                    Write-Host "Restored and Launched." -ForegroundColor Green
-                }
-            }
+    $folder = "C:\Program Files\Securly\Classroom"
+    $backup = "C:\Users\Public\Documents\SecurlyBackup\Classroom.exe"
+    $target = "$folder\Classroom.exe"
+
+    # 1. Force-open the folder
+    takeown /f "$folder" /a /r /d y | Out-Null
+    icacls "$folder" /reset /t /c /q | Out-Null
+    icacls "$folder" /grant "Everyone:(OI)(CI)F" /t /c /q | Out-Null
+
+    # 2. Kill any small 'Dummy' files
+    Get-ChildItem $folder -Filter "*.exe" | Where-Object { $_.Length -lt 5000 } | Remove-Item -Force -ErrorAction SilentlyContinue
+
+    # 3. Restore the real app
+    if (Test-Path $backup) {
+        Move-Item $backup $target -Force -ErrorAction SilentlyContinue
+    }
+
+    # 4. Final check - if the app exists, force it to run
+    if (Test-Path $target) {
+        Unblock-File $target -ErrorAction SilentlyContinue
+        
+        # Clean local lock-state
+        if (Test-Path "C:\ProgramData\Securly") { Remove-Item "C:\ProgramData\Securly\*" -Recurse -Force -ErrorAction SilentlyContinue }
+        
+        # Restart the background watcher
+        sc.exe config "SecurlyClassroomService" start= auto | Out-Null
+        Start-Service "SecurlyClassroomService" -ErrorAction SilentlyContinue
+        
+        # The 'Start' command bypasses some PowerShell launch restrictions
+        Start-Sleep -Seconds 2
+        cmd /c "start `"`" `"$target`""
+        Write-Host "Unlock attempted. Check your system tray." -ForegroundColor Green
+    } else {
+        Write-Host "Error: Real Classroom.exe not found in backup folder." -ForegroundColor Red
+    }
+}
+
         }
     }
 })
