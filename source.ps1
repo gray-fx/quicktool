@@ -1,7 +1,7 @@
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 # ==========================================
-# 1. THE HTML GUI  qpwihgboq3buewgpqvepwbin6789765678657890586
+# 1. THE HTML GUI  
 # ==========================================
 $html = @"
 <!DOCTYPE html>
