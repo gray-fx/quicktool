@@ -1,7 +1,7 @@
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 # ==========================================
-# 1. THE HTML GUI CHECK OCTO  3y2587927386579327
+# 1. THE HTML GUI CHECK OCTO  
 # ==========================================
 $html = @"
 <!DOCTYPE html>
@@ -118,15 +118,34 @@ $browser.add_Navigating({
 
 
             "enable" {
-                $policyPath = "HKLM:\Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings"
-                if (-not (Test-Path $policyPath)) { New-Item -Path $policyPath -Force | Out-Null }
-                Set-ItemProperty -Path $policyPath -Name "ProxySettingsPerUser" -Value 1 -Type DWord
-                Set-ItemProperty -Path $policyPath -Name "AutoConfigURL" -Value "https://www-filter.c2.securly.com" -Type String
-            }
-            "disable" {
-                $policyPath = "HKLM:\Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings"
-                Remove-ItemProperty -Path $policyPath -Name "AutoConfigURL" -ErrorAction SilentlyContinue
-            }
+    $pac = "https://www-filter.c2.securly.com"
+    $hives = @("HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings", 
+               "HKLM:\Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings")
+
+    foreach ($path in $hives) {
+        if (-not (Test-Path $path)) { New-Item -Path $path -Force | Out-Null }
+        Set-ItemProperty -Path $path -Name "AutoConfigURL" -Value $pac -Type String
+        
+        # Override GPO: Force User settings
+        if ($path -like "HKLM*") { Set-ItemProperty -Path $path -Name "ProxySettingsPerUser" -Value 1 -Type DWord }
+
+        # Binary Force: 05 enables, 01 disables checkbox
+        $bin = [byte[]](0x46,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x05,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00)
+        Set-ItemProperty -Path "$path\Connections" -Name "DefaultConnectionSettings" -Value $bin -Type Binary -ErrorAction SilentlyContinue
+    }
+    [Win32.WinInet]::InternetSetOption([IntPtr]::Zero, 39, [IntPtr]::Zero, 0) | Out-Null
+}
+"disable" {
+    $hives = @("HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings", 
+               "HKLM:\Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings")
+    foreach ($path in $hives) {
+        Remove-ItemProperty -Path $path -Name "AutoConfigURL" -ErrorAction SilentlyContinue
+        $bin = [byte[]](0x46,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00)
+        Set-ItemProperty -Path "$path\Connections" -Name "DefaultConnectionSettings" -Value $bin -Type Binary -ErrorAction SilentlyContinue
+    }
+    [Win32.WinInet]::InternetSetOption([IntPtr]::Zero, 39, [IntPtr]::Zero, 0) | Out-Null
+}
+
         }
     }
 })
