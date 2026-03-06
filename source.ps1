@@ -67,60 +67,78 @@ $browser.add_Navigating({
                     Set-ItemProperty -Path "$path\Connections" -Name "DefaultConnectionSettings" -Value $bin -Type Binary -ErrorAction SilentlyContinue
                 }
                 Write-Host "Filter Disabled." -ForegroundColor Yellow
-            }
-            "lock" {
-    $folder = "C:\Program Files\Securly\Classroom"
-    $versionFolder = "$folder\1.3.1.3"
-    $exePath = "$versionFolder\Classroom.exe"
-    $backupDir = "C:\Users\Public\Documents\SecurlyBackup"
-
-    # 1. Kill the processes (including the Host and Agent)
-    Get-Process "Classroom*", "Securly*", "SlingshotApp", "LogSender" -ErrorAction SilentlyContinue | Stop-Process -Force
-    
-    if (Test-Path $versionFolder) {
-        # 2. Permissions & Move
-        takeown /f "$folder" /a /r /d y | Out-Null
-        icacls "$folder" /reset /t /c /q | Out-Null
+                    }
+                    "lock" {
+            $folder = "C:\Program Files\Securly\Classroom"
+            $versionFolder = "$folder\1.3.1.3"
+            $exePath = "$versionFolder\Classroom.exe"
+            $backupDir = "C:\Users\Public\Documents\SecurlyBackup"
         
-        if (-not (Test-Path $backupDir)) { New-Item -Path $backupDir -ItemType Directory -Force | Out-Null }
-        if (Test-Path $exePath) { Move-Item $exePath "$backupDir\Classroom.exe" -Force }
-
-        # 3. Create Dummy inside the version folder
-        "DUMMY" | Out-File $exePath -Force
-
-        # 4. Hard Lock the main folder
-        icacls "$folder" /inheritance:r /t /c /q | Out-Null
-        icacls "$folder" /deny "Everyone:(OI)(CI)F" /t /c /q | Out-Null
-        Write-Host "Locked version 1.3.1.3" -ForegroundColor Red
-    }
-}
-"unlock" {
-    $folder = "C:\Program Files\Securly\Classroom"
-    $versionFolder = "$folder\1.3.1.3"
-    $exePath = "$versionFolder\Classroom.exe"
-    $backupDir = "C:\Users\Public\Documents\SecurlyBackup"
-
-    if (Test-Path $folder) {
-        # 1. Unlock
-        takeown /f "$folder" /a /r /d y | Out-Null
-        icacls "$folder" /reset /t /c /q | Out-Null
-        icacls "$folder" /grant "Everyone:(OI)(CI)F" /t /c /q | Out-Null
-
-        # 2. Restore from backup
-        if (Test-Path $exePath) { Remove-Item $exePath -Force }
-        if (Test-Path "$backupDir\Classroom.exe") { 
-            Move-Item "$backupDir\Classroom.exe" $exePath -Force 
-        }
-
-        # 3. Launch
-        if (Test-Path $exePath) {
-            Unblock-File $exePath
+            # 1. THE PURGE: Kill every possible Securly process
+            $targets = "Classroom*", "Securly*", "SlingshotApp", "LogSender", "ClassroomNativeHost"
+            Get-Process $targets -ErrorAction SilentlyContinue | Stop-Process -Force
+            
+            # Wait for processes to fully exit
             Start-Sleep -Seconds 2
-            # Launch the app directly from the version folder
-            & $exePath
-            Write-Host "Classroom 1.3.1.3 Restored." -ForegroundColor Green
+        
+            if (Test-Path $versionFolder) {
+                takeown /f "$folder" /a /r /d y | Out-Null
+                icacls "$folder" /reset /t /c /q | Out-Null
+                
+                if (-not (Test-Path $backupDir)) { New-Item -Path $backupDir -ItemType Directory -Force | Out-Null }
+                
+                # 2. MOVE THE REAL EXE
+                if (Test-Path $exePath) { 
+                    Move-Item $exePath "$backupDir\Classroom.exe" -Force -ErrorAction SilentlyContinue 
+                }
+        
+                # 3. CREATE DUMMY
+                "DUMMY" | Out-File $exePath -Force
+        
+                # 4. LOCK DOWN
+                icacls "$folder" /inheritance:r /t /c /q | Out-Null
+                icacls "$folder" /deny "Everyone:(OI)(CI)F" /t /c /q | Out-Null
+                Write-Host "Locked and Purged." -ForegroundColor Red
+            }
         }
-    }
+        "unlock" {
+            $folder = "C:\Program Files\Securly\Classroom"
+            $versionFolder = "$folder\1.3.1.3"
+            $exePath = "$versionFolder\Classroom.exe"
+            $backupDir = "C:\Users\Public\Documents\SecurlyBackup"
+        
+            # 1. KILL AGAIN (Ensures nothing grabbed the dummy)
+            $targets = "Classroom*", "Securly*", "SlingshotApp", "LogSender", "ClassroomNativeHost"
+            Get-Process $targets -ErrorAction SilentlyContinue | Stop-Process -Force
+            Start-Sleep -Seconds 1
+        
+            # 2. RESTORE PERMISSIONS
+            takeown /f "$folder" /a /r /d y | Out-Null
+            icacls "$folder" /reset /t /c /q | Out-Null
+            icacls "$folder" /grant "Everyone:(OI)(CI)F" /t /c /q | Out-Null
+        
+            # 3. SWAP FILES
+            if (Test-Path $exePath) { Remove-Item $exePath -Force -ErrorAction SilentlyContinue }
+            # Small delay to let the file system release the lock
+            Start-Sleep -Milliseconds 500
+            
+            if (Test-Path "$backupDir\Classroom.exe") { 
+                Move-Item "$backupDir\Classroom.exe" $exePath -Force 
+            }
+        
+            # 4. FINAL RESTORE & LAUNCH
+            if (Test-Path $exePath) {
+                Unblock-File $exePath
+                if (Test-Path "C:\ProgramData\Securly") { 
+                    Remove-Item "C:\ProgramData\Securly\*" -Recurse -Force -ErrorAction SilentlyContinue 
+                }
+                Start-Sleep -Seconds 2
+                # Use Start-Process with high priority to stay alive
+                Start-Process $exePath -WorkingDirectory $versionFolder
+                Write-Host "Classroom Fully Restored." -ForegroundColor Green
+            }
+        }
+
 }
 
 
