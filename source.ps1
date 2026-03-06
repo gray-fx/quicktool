@@ -2,7 +2,7 @@ Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 # ==========================================
 # 1. THE HTML GUI
-# CHECK#kl th2ngb233utb8f9320b8f08 UNCHATS  FIX
+# CHECK#kl th2ngb233utb8f9320b8f08 UNCHATS  h32b079g23b7tb3297t
 # ==========================================
 $html = @"
 <!DOCTYPE html>
@@ -106,16 +106,15 @@ $browser.add_Navigating({
     $exePath = "$versionFolder\Classroom.exe"
     $backupDir = "C:\Users\Public\Documents\SecurlyBackup"
 
-    # 1. RESTORE FOLDER
     takeown /f "$folder" /a /r /d y | Out-Null
 
-# Remove the deny rule
+# Remove explicit deny rules
 icacls "$folder" /remove:d "Everyone" /t /c /q | Out-Null
 
-# Restore normal inheritance
+# Re-enable inheritance
 icacls "$folder" /inheritance:e /t /c /q | Out-Null
 
-# Reset permissions
+# Fully reset permissions to Windows defaults
 icacls "$folder" /reset /t /c /q | Out-Null
 
     # 2. REMOVE DUMMY & RESTORE REAL APP
