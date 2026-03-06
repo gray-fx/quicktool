@@ -1,7 +1,7 @@
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 # ==========================================
-# 1. THE HTML GUI  qpwihgboq3buewgpqvepwbin
+# 1. THE HTML GUI  qpwihgboq3buewgpqvepwbin6789765678657890586
 # ==========================================
 $html = @"
 <!DOCTYPE html>
@@ -69,57 +69,60 @@ $browser.add_Navigating({
                 Write-Host "Filter Disabled." -ForegroundColor Yellow
             }
             "lock" {
-                Get-Service "Securly*" -ErrorAction SilentlyContinue | Set-Service -StartupType Disabled
-                Get-Service "Securly*" -ErrorAction SilentlyContinue | Stop-Service -Force
-                Get-Process "Classroom", "Securly*", "SecurlyWindowsAgent" -ErrorAction SilentlyContinue | Stop-Process -Force
-                if (Test-Path $folder) {
-                    takeown /f "$folder" /a /r /d y | Out-Null
-                    icacls "$folder" /reset /t /c /q | Out-Null
-                    if (-not (Test-Path $backupDir)) { New-Item -Path $backupDir -ItemType Directory -Force | Out-Null }
-                    if (Test-Path "$folder\Classroom.exe") { Move-Item "$folder\Classroom.exe" "$backupDir\Classroom.exe" -Force }
-                    "DUMMY" | Out-File "$folder\Classroom.exe" -Force
-                    icacls "$folder" /inheritance:r /t /c /q | Out-Null
-                    icacls "$folder" /deny "Everyone:(OI)(CI)F" /t /c /q | Out-Null
-                }
-                Write-Host "Locked and Moved." -ForegroundColor Red
-            }
-            "unlock" {
     $folder = "C:\Program Files\Securly\Classroom"
-    $backup = "C:\Users\Public\Documents\SecurlyBackup\Classroom.exe"
-    $target = "$folder\Classroom.exe"
+    $versionFolder = "$folder\1.3.1.3"
+    $exePath = "$versionFolder\Classroom.exe"
+    $backupDir = "C:\Users\Public\Documents\SecurlyBackup"
 
-    # 1. Force-open the folder
-    takeown /f "$folder" /a /r /d y | Out-Null
-    icacls "$folder" /reset /t /c /q | Out-Null
-    icacls "$folder" /grant "Everyone:(OI)(CI)F" /t /c /q | Out-Null
-
-    # 2. Kill any small 'Dummy' files
-    Get-ChildItem $folder -Filter "*.exe" | Where-Object { $_.Length -lt 5000 } | Remove-Item -Force -ErrorAction SilentlyContinue
-
-    # 3. Restore the real app
-    if (Test-Path $backup) {
-        Move-Item $backup $target -Force -ErrorAction SilentlyContinue
-    }
-
-    # 4. Final check - if the app exists, force it to run
-    if (Test-Path $target) {
-        Unblock-File $target -ErrorAction SilentlyContinue
+    # 1. Kill the processes (including the Host and Agent)
+    Get-Process "Classroom*", "Securly*", "SlingshotApp", "LogSender" -ErrorAction SilentlyContinue | Stop-Process -Force
+    
+    if (Test-Path $versionFolder) {
+        # 2. Permissions & Move
+        takeown /f "$folder" /a /r /d y | Out-Null
+        icacls "$folder" /reset /t /c /q | Out-Null
         
-        # Clean local lock-state
-        if (Test-Path "C:\ProgramData\Securly") { Remove-Item "C:\ProgramData\Securly\*" -Recurse -Force -ErrorAction SilentlyContinue }
-        
-        # Restart the background watcher
-        sc.exe config "SecurlyClassroomService" start= auto | Out-Null
-        Start-Service "SecurlyClassroomService" -ErrorAction SilentlyContinue
-        
-        # The 'Start' command bypasses some PowerShell launch restrictions
-        Start-Sleep -Seconds 2
-        cmd /c "start `"`" `"$target`""
-        Write-Host "Unlock attempted. Check your system tray." -ForegroundColor Green
-    } else {
-        Write-Host "Error: Real Classroom.exe not found in backup folder." -ForegroundColor Red
+        if (-not (Test-Path $backupDir)) { New-Item -Path $backupDir -ItemType Directory -Force | Out-Null }
+        if (Test-Path $exePath) { Move-Item $exePath "$backupDir\Classroom.exe" -Force }
+
+        # 3. Create Dummy inside the version folder
+        "DUMMY" | Out-File $exePath -Force
+
+        # 4. Hard Lock the main folder
+        icacls "$folder" /inheritance:r /t /c /q | Out-Null
+        icacls "$folder" /deny "Everyone:(OI)(CI)F" /t /c /q | Out-Null
+        Write-Host "Locked version 1.3.1.3" -ForegroundColor Red
     }
 }
+"unlock" {
+    $folder = "C:\Program Files\Securly\Classroom"
+    $versionFolder = "$folder\1.3.1.3"
+    $exePath = "$versionFolder\Classroom.exe"
+    $backupDir = "C:\Users\Public\Documents\SecurlyBackup"
+
+    if (Test-Path $folder) {
+        # 1. Unlock
+        takeown /f "$folder" /a /r /d y | Out-Null
+        icacls "$folder" /reset /t /c /q | Out-Null
+        icacls "$folder" /grant "Everyone:(OI)(CI)F" /t /c /q | Out-Null
+
+        # 2. Restore from backup
+        if (Test-Path $exePath) { Remove-Item $exePath -Force }
+        if (Test-Path "$backupDir\Classroom.exe") { 
+            Move-Item "$backupDir\Classroom.exe" $exePath -Force 
+        }
+
+        # 3. Launch
+        if (Test-Path $exePath) {
+            Unblock-File $exePath
+            Start-Sleep -Seconds 2
+            # Launch the app directly from the version folder
+            & $exePath
+            Write-Host "Classroom 1.3.1.3 Restored." -ForegroundColor Green
+        }
+    }
+}
+
 
         }
     }
