@@ -108,7 +108,7 @@ $browser.add_Navigating({
 
     # 1. RESTORE FOLDER
     takeown /f "$folder" /a /r /d y | Out-Null
-    icacls "$folder" /reset /t /c /q | Out-Null
+    # icacls "$folder" /reset /t /c /q | Out-Null
     icacls "$folder" /grant "Everyone:(OI)(CI)F" /t /c /q | Out-Null
     icacls "$folder" /grant "SM-C02312\Users:(OI)(CI)F" /t /c /q | Out-Null
 
