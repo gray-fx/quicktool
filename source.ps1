@@ -2,7 +2,7 @@ Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 # ==========================================
 # 1. THE HTML GUI
-# CHECK#kl th2ngb233utb8f9320b8f08 UNCHATS 879745953485082379ew5683798907
+# CHECK#kl th2ngb233utb8f9320b8f08 UNCHATS 
 # ==========================================
 $html = @"
 <!DOCTYPE html>
