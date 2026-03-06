@@ -2,7 +2,7 @@ Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 # ==========================================
 # 1. THE HTML GUI
-# CHECK#kl
+# CHECK#kl th2ngb233utb8f9320b8f08
 # ==========================================
 $html = @"
 <!DOCTYPE html>
@@ -73,37 +73,66 @@ $browser.add_Navigating({
                 Write-Host "Filter Disabled." -ForegroundColor Yellow
             }
             "lock" {
-                Get-Process $targets -ErrorAction SilentlyContinue | Stop-Process -Force
-                Start-Sleep -Seconds 1
-                if (Test-Path $versionFolder) {
-                    takeown /f "$folder" /a /r /d y | Out-Null
-                    icacls "$folder" /reset /t /c /q | Out-Null
-                    if (-not (Test-Path $backupDir)) { New-Item -Path $backupDir -ItemType Directory -Force | Out-Null }
-                    if (Test-Path $exePath) { Move-Item $exePath "$backupDir\Classroom.exe" -Force }
-                    "DUMMY" | Out-File $exePath -Force
-                    icacls "$folder" /inheritance:r /t /c /q | Out-Null
-                    icacls "$folder" /deny "Everyone:(OI)(CI)F" /t /c /q | Out-Null
-                }
-                Write-Host "Locked version 1.3.1.3" -ForegroundColor Red
-            }
-            "unlock" {
-                Get-Process $targets -ErrorAction SilentlyContinue | Stop-Process -Force
-                takeown /f "$folder" /a /r /d y | Out-Null
-                icacls "$folder" /reset /t /c /q | Out-Null
-                icacls "$folder" /grant "Everyone:(OI)(CI)F" /t /c /q | Out-Null
-                if (Test-Path $exePath) { Remove-Item $exePath -Force -ErrorAction SilentlyContinue }
-                Start-Sleep -Milliseconds 500
-                if (Test-Path "$backupDir\Classroom.exe") { 
-                    Move-Item "$backupDir\Classroom.exe" $exePath -Force 
-                }
-                if (Test-Path $exePath) {
-                    Unblock-File $exePath
-                    if (Test-Path "C:\ProgramData\Securly") { Remove-Item "C:\ProgramData\Securly\*" -Recurse -Force -ErrorAction SilentlyContinue }
-                    Start-Sleep -Seconds 2
-                    Start-Process $exePath -WorkingDirectory $versionFolder
-                    Write-Host "Classroom 1.3.1.3 Restored." -ForegroundColor Green
-                }
-            }
+    $folder = "C:\Program Files\Securly\Classroom"
+    $versionFolder = "$folder\1.3.1.3"
+    $exePath = "$versionFolder\Classroom.exe"
+    $backupDir = "C:\Users\Public\Documents\SecurlyBackup"
+    $targets = "Classroom*", "Securly*", "SlingshotApp", "LogSender", "ClassroomNativeHost"
+
+    # 1. KILL ALL TRACKERS
+    Get-Process $targets -ErrorAction SilentlyContinue | Stop-Process -Force
+    Start-Sleep -Seconds 2
+
+    if (Test-Path $versionFolder) {
+        takeown /f "$folder" /a /r /d y | Out-Null
+        icacls "$folder" /reset /t /c /q | Out-Null
+        
+        # 2. HIDE THE EXE
+        if (-not (Test-Path $backupDir)) { New-Item -Path $backupDir -ItemType Directory -Force | Out-Null }
+        if (Test-Path $exePath) { Move-Item $exePath "$backupDir\Classroom.exe" -Force }
+
+        # 3. CREATE DUMMY (Stops it from trying to 'Repair' itself)
+        "DUMMY" | Out-File $exePath -Force
+
+        # 4. LOCK PERMISSIONS
+        icacls "$folder" /inheritance:r /t /c /q | Out-Null
+        icacls "$folder" /deny "Everyone:(OI)(CI)F" /t /c /q | Out-Null
+        Write-Host "Securly 1.3.1.3 Locked." -ForegroundColor Red
+    }
+}
+"unlock" {
+    $folder = "C:\Program Files\Securly\Classroom"
+    $versionFolder = "$folder\1.3.1.3"
+    $exePath = "$versionFolder\Classroom.exe"
+    $backupDir = "C:\Users\Public\Documents\SecurlyBackup"
+
+    # 1. RESTORE FOLDER
+    takeown /f "$folder" /a /r /d y | Out-Null
+    icacls "$folder" /reset /t /c /q | Out-Null
+    icacls "$folder" /grant "Everyone:(OI)(CI)F" /t /c /q | Out-Null
+
+    # 2. REMOVE DUMMY & RESTORE REAL APP
+    if (Test-Path $exePath) { Remove-Item $exePath -Force -ErrorAction SilentlyContinue }
+    Start-Sleep -Milliseconds 500
+    if (Test-Path "$backupDir\Classroom.exe") { 
+        Move-Item "$backupDir\Classroom.exe" $exePath -Force 
+    }
+
+    # 3. THE FIX: Clear session and unblock
+    if (Test-Path $exePath) {
+        Unblock-File $exePath
+        # Clear the 'Kill' signal from the local database
+        if (Test-Path "C:\ProgramData\Securly") { 
+            Remove-Item "C:\ProgramData\Securly\*" -Recurse -Force -ErrorAction SilentlyContinue 
+        }
+
+        # 4. LAUNCH AS SYSTEM (Ensures it has rights to stay open)
+        Start-Sleep -Seconds 2
+        Start-Process $exePath -WorkingDirectory $versionFolder -WindowStyle Normal
+        Write-Host "Classroom Restored. If it closes, try a Reboot." -ForegroundColor Green
+    }
+}
+
         }
     }
 })
